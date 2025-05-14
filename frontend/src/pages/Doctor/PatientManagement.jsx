@@ -62,10 +62,6 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
   const notificationSoundRef = useRef(null);
   const [userInteracted, setUserInteracted] = useState(false);
   
-  // Detail view state
-  const [selectedNotification, setSelectedNotification] = useState(null);
-  const [showDetailView, setShowDetailView] = useState(false);
-  
   // WebSocket refs
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -302,6 +298,75 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
 
   // Handle new notification
   const handleNewNotification = useCallback((data) => {
+    // Debug log to see data structure
+    console.log('Processing notification data:', JSON.stringify(data, null, 2));
+    
+    // For patient assignments, we want to log more details but accept more types of data
+    if (data.event === 'patient_assigned') {
+      // For debugging: log details about the patient data
+      console.log('Patient data check:', {
+        hasDataObject: Boolean(data.data),
+        patientObject: data.data?.patient,
+        patientId: data.data?.patient_id || data.data?.patient?.id,
+        assignmentId: data.assignment_id
+      });
+      
+      // Accept messages even without patient name if we have an ID
+      // Let's be more lenient about the structure
+      const hasPatientInfo = 
+        (data.data?.patient_id) || 
+        (data.data?.patient?.id) || 
+        (data.assignment_id); // Use assignment ID as fallback
+        
+      if (!hasPatientInfo) {
+        console.log('Notification lacks patient identifier:', data);
+        // Create a simple notification anyway to make sure it shows up
+        const newNotification = {
+          id: data.message_id || `notif-${Date.now()}`,
+          title: 'New Patient Assignment',
+          message: 'A new patient has been assigned to you.',
+          timestamp: data.timestamp || new Date().toISOString(),
+          type: data.event,
+          read: false,
+          data: data.data || {}
+        };
+        
+        // Add notification to state
+        setNotifications(prev => [newNotification, ...prev.slice(0, 19)]);
+        setUnreadCount(prev => prev + 1);
+        
+        // Play sound and animate bell
+        playNotificationSound();
+        animateBell();
+        
+        // Show toast notification
+        toast.info('New patient assigned', {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+        
+        return;
+      }
+      
+      // Check if we already have this notification (prevents duplicates)
+      const notificationExists = notifications.some(
+        n => n.id === data.message_id || 
+            (n.data?.patient && 
+             data.data?.patient && 
+             n.data.patient.id === data.data.patient.id && 
+             new Date(n.timestamp) > new Date(Date.now() - 10000)) // Within last 10 seconds
+      );
+      
+      if (notificationExists) {
+        console.log('Ignoring duplicate notification:', data);
+        return;
+      }
+    }
+    
     // Create a notification object
     const newNotification = {
       id: data.message_id || `notif-${Date.now()}`,
@@ -322,36 +387,67 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
     animateBell();
     
     // For patient assignments, notify parent component
-    if (data.event === 'patient_assigned' && data.data?.patient && onNewPatientAssigned) {
-      const patientData = data.data.patient;
+    if (data.event === 'patient_assigned' && data.data && onNewPatientAssigned) {
+      // Try to extract patient data from different possible structures
+      const patientData = data.data.patient || {};
       
-      // Prepare patient object for parent component
+      // Extract patient ID from possible locations
+      const patientId = data.data.patient_id || patientData.id || data.assignment_id;
+      
+      // Extract name if available
+      let firstName = '';
+      let lastName = '';
+      
+      if (patientData.name) {
+        const nameParts = patientData.name.split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+      } else if (patientData.first_name || patientData.last_name) {
+        firstName = patientData.first_name || '';
+        lastName = patientData.last_name || '';
+      }
+      
+      // Create a patient object with available info
       const patient = {
-        id: data.data.patient_id || patientData.id,
-        first_name: patientData.name.split(' ')[0],
-        last_name: patientData.name.split(' ').slice(1).join(' '),
+        id: patientId,
+        first_name: firstName,
+        last_name: lastName,
         registration_number: patientData.registration_number,
         date_of_birth: patientData.date_of_birth || 
-                       new Date(new Date().setFullYear(new Date().getFullYear() - patientData.age)).toISOString(),
+                       (patientData.age ? new Date(new Date().setFullYear(new Date().getFullYear() - patientData.age)).toISOString() : null),
         gender: patientData.gender,
         phone_number: patientData.phone_number,
         isNew: true, // Flag as new patient
         assignedTimestamp: data.timestamp
       };
       
+      // Call parent handler with patient data
+      console.log('Notifying parent about new patient:', patient);
       onNewPatientAssigned(patient);
+      
+      // Show toast notification with patient name if available
+      const patientName = firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName || 'New patient';
+      toast.success(`New patient assigned: ${patientName}`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+    } else if (data.event !== 'connection_established') {
+      // Show regular toast notification for non-patient notifications
+      // Skip connection_established notifications
+      toast.info(newNotification.title, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     }
-    
-    // Show toast notification
-    toast.info(newNotification.title, {
-      position: "top-right",
-      autoClose: 5000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-    });
-  }, [animateBell, onNewPatientAssigned, playNotificationSound]);
+  }, [animateBell, notifications, onNewPatientAssigned, playNotificationSound]);
   
   // Initialize WebSocket connection
   useEffect(() => {
@@ -377,27 +473,6 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
       }
     };
   }, [cleanupWebSocket]);
-  
-  // Open notification detail view
-  const openNotificationDetail = useCallback((notification) => {
-    markAsRead(notification.id);
-    setSelectedNotification(notification);
-    setShowDetailView(true);
-  }, []);
-  
-  // Close notification detail view
-  const closeNotificationDetail = useCallback(() => {
-    setShowDetailView(false);
-  }, []);
-  
-  // View patient details
-  const handleViewPatientDetails = useCallback((patientId) => {
-    if (onViewPatientDetails && patientId) {
-      onViewPatientDetails(patientId);
-      closeNotificationDetail();
-      setShowNotifications(false);
-    }
-  }, [onViewPatientDetails, closeNotificationDetail]);
   
   // Update unread count
   const updateUnreadCount = useCallback(() => {
@@ -439,57 +514,6 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
     if (diffDays < 7) return `${diffDays}d ago`;
     
     return notifTime.toLocaleDateString();
-  }, []);
-
-  // Format full timestamp
-  const formatFullTimestamp = useCallback((timestamp) => {
-    if (!timestamp) return '';
-    
-    const date = new Date(timestamp);
-    return date.toLocaleString(undefined, { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-  }, []);
-  
-  // Get priority color class
-  const getPriorityColorClass = useCallback((priority) => {
-    if (!priority) return 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
-    
-    switch(priority.toUpperCase()) {
-      case 'HIGH':
-        return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800/50';
-      case 'MEDIUM':
-        return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800/50';
-      case 'NORMAL':
-      case 'LOW':
-        return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-800/50';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
-    }
-  }, []);
-  
-  // Get status color class
-  const getStatusColorClass = useCallback((status) => {
-    if (!status) return 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300';
-    
-    switch(status.toUpperCase()) {
-      case 'PENDING':
-        return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800/50';
-      case 'IN_PROGRESS':
-        return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-800/50';
-      case 'COMPLETED':
-        return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/40 dark:text-green-300 dark:border-green-800/50';
-      case 'CANCELLED':
-      case 'REJECTED':
-        return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800/50';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
-    }
   }, []);
   
   // Actual rendering of the component
@@ -596,7 +620,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                                   </div>
                                   <div>
                                     <p className="font-medium text-slate-800 dark:text-slate-200">
-                                      {notification.data.patient.name}
+                                      {notification.data.patient.name || 'New Patient'}
                                     </p>
                                     <p className="text-slate-500 dark:text-slate-400 text-xs">
                                       {notification.data.patient.registration_number || 'No Reg #'}
@@ -614,23 +638,23 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                                 </span>
                               )}
                               
-                              <div className="flex space-x-2 ml-auto">
+                              {notification.type === 'patient_assigned' && (
                                 <button 
-                                  onClick={() => openNotificationDetail(notification)}
-                                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
+                                  onClick={() => {
+                                    const patientId = notification.data?.patient_id || 
+                                                     notification.data?.patient?.id || 
+                                                     notification.assignment_id;
+                                    if (onViewPatientDetails && patientId) {
+                                      markAsRead(notification.id);
+                                      onViewPatientDetails(patientId);
+                                      setShowNotifications(false);
+                                    }
+                                  }}
+                                  className="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
                                 >
-                                  View Details
+                                  View Patient
                                 </button>
-                                
-                                {notification.type === 'patient_assigned' && notification.data?.patient && (
-                                  <button 
-                                    onClick={() => handleViewPatientDetails(notification.data.patient_id || notification.data.patient.id)}
-                                    className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-medium"
-                                  >
-                                    View Patient
-                                  </button>
-                                )}
-                              </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -684,147 +708,6 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
           )}
         </AnimatePresence>
       </div>
-      
-      {/* Notification Detail Modal */}
-      <AnimatePresence>
-        {showDetailView && selectedNotification && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10000] p-4 overflow-y-auto">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg overflow-hidden relative"
-            >
-              {/* Header with title and close button */}
-              <div className="border-b border-slate-200 dark:border-slate-700 p-5 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30">
-                <h3 className="font-semibold text-lg text-slate-800 dark:text-white">
-                  Notification Details
-                </h3>
-                <button
-                  onClick={closeNotificationDetail}
-                  className="p-1.5 rounded-full bg-white/80 dark:bg-slate-700/80 hover:bg-white dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
-                >
-                  <FiX className="w-5 h-5" />
-                </button>
-              </div>
-              
-              {/* Notification content */}
-              <div className="p-5">
-                <div className="flex items-start mb-4">
-                  <div className="flex-shrink-0 mr-4">
-                    {selectedNotification.type === 'patient_assigned' ? (
-                      <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                        <FiUser className="w-6 h-6" />
-                      </div>
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                        <FiMessageSquare className="w-6 h-6" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-medium text-slate-900 dark:text-white">
-                      {selectedNotification.title}
-                    </h4>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {formatFullTimestamp(selectedNotification.timestamp)}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Message/description */}
-                <div className="mb-5 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                  <p className="text-slate-700 dark:text-slate-300">
-                    {selectedNotification.message}
-                  </p>
-                </div>
-                
-                {/* Status & Priority if available */}
-                {(selectedNotification.data?.status || selectedNotification.data?.priority) && (
-                  <div className="flex items-center gap-3 mb-5">
-                    {selectedNotification.data?.status && (
-                      <span className={`px-3 py-1.5 text-xs font-medium rounded-full border ${getStatusColorClass(selectedNotification.data.status)}`}>
-                        Status: {selectedNotification.data.status}
-                      </span>
-                    )}
-                    
-                    {selectedNotification.data?.priority && (
-                      <span className={`px-3 py-1.5 text-xs font-medium rounded-full border ${getPriorityColorClass(selectedNotification.data.priority)}`}>
-                        Priority: {selectedNotification.data.priority}
-                      </span>
-                    )}
-                  </div>
-                )}
-                
-                {/* Patient info if available */}
-                {selectedNotification.data?.patient && (
-                  <div className="mb-5">
-                    <h5 className="font-medium text-slate-800 dark:text-white mb-2 flex items-center">
-                      <FiUser className="w-4 h-4 mr-1" /> Patient Information
-                    </h5>
-                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600/50 p-4">
-                      <div className="grid grid-cols-2 gap-y-3 text-sm">
-                        <div>
-                          <span className="text-slate-500 dark:text-slate-400 block text-xs">Name</span>
-                          <span className="font-medium text-slate-800 dark:text-slate-200">{selectedNotification.data.patient.name}</span>
-                        </div>
-                        
-                        {selectedNotification.data.patient.registration_number && (
-                          <div>
-                            <span className="text-slate-500 dark:text-slate-400 block text-xs">Registration #</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{selectedNotification.data.patient.registration_number}</span>
-                          </div>
-                        )}
-                        
-                        {selectedNotification.data.patient.age && (
-                          <div>
-                            <span className="text-slate-500 dark:text-slate-400 block text-xs">Age</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{selectedNotification.data.patient.age} years</span>
-                          </div>
-                        )}
-                        
-                        {selectedNotification.data.patient.gender && (
-                          <div>
-                            <span className="text-slate-500 dark:text-slate-400 block text-xs">Gender</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{selectedNotification.data.patient.gender}</span>
-                          </div>
-                        )}
-                        
-                        {selectedNotification.data.patient.phone_number && (
-                          <div>
-                            <span className="text-slate-500 dark:text-slate-400 block text-xs">Phone</span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">{selectedNotification.data.patient.phone_number}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Action buttons */}
-                <div className="flex justify-end gap-3 mt-6">
-                  <button
-                    onClick={closeNotificationDetail}
-                    className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    Close
-                  </button>
-                  
-                  {selectedNotification.type === 'patient_assigned' && selectedNotification.data?.patient && (
-                    <button
-                      onClick={() => handleViewPatientDetails(selectedNotification.data.patient_id || selectedNotification.data.patient.id)}
-                      className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-lg transition-colors shadow-sm"
-                    >
-                      View Patient
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </>
   );
 
@@ -841,188 +724,60 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
   );
 };
 
-// New Recent Patients Cards component
-const RecentPatientCards = ({ patients, onViewPatientDetails }) => {
-  // Sort patients by assignment time (newest first)
-  const sortedPatients = React.useMemo(() => {
-    return [...patients]
-      .filter(patient => patient.isNew || patient.assignedTimestamp)
-      .sort((a, b) => {
-        const dateA = new Date(a.assignedTimestamp || a.created_at || 0);
-        const dateB = new Date(b.assignedTimestamp || b.created_at || 0);
-        return dateB - dateA; // Newest first
-      })
-      .slice(0, 10); // Limit to 10 most recent
-  }, [patients]);
-  
-  // Format relative time
-  const formatRelativeTime = (timestamp) => {
-    if (!timestamp) return '';
-    
-    const now = new Date();
-    const assignTime = new Date(timestamp);
-    const diffMs = now - assignTime;
-    const diffSecs = Math.floor(diffMs / 1000);
-    const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffSecs < 60) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return 'yesterday';
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return assignTime.toLocaleDateString();
-  };
-  
-  // Calculate age from date of birth
-  const calculateAge = (dateOfBirthStr) => {
-    if (!dateOfBirthStr) return "N/A";
-    
-    const dob = new Date(dateOfBirthStr);
-    const ageDifMs = Date.now() - dob.getTime();
-    const ageDate = new Date(ageDifMs);
-    return Math.abs(ageDate.getUTCFullYear() - 1970);
-  };
-  
-  // Get full name
-  const getFullName = (patient) => {
-    if (patient.first_name && patient.last_name) {
-      return `${patient.first_name} ${patient.last_name}`;
-    } else if (patient.first_name) {
-      return patient.first_name;
-    } else if (patient.last_name) {
-      return patient.last_name;
-    } else {
-      return "No Name";
-    }
-  };
-  
-  // Get initials
-  const getInitials = (patient) => {
-    const name = getFullName(patient);
-    return name === "No Name" ? "?" : name.split(' ').map(n => n[0]).join('');
-  };
-  
-  if (sortedPatients.length === 0) {
-    return null;
-  }
+// RecentPatientCards component
+const RecentPatientCards = ({ patients, onViewPatientDetails, getInitials, getFullName }) => {
+  // Only show last 3 recently assigned patients
+  const recentPatients = patients.slice(0, 3);
   
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center">
-          <FiUser className="mr-2 text-indigo-500 dark:text-indigo-400" />
-          Recently Assigned Patients
-        </h2>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {sortedPatients.map(patient => (
-          <motion.div
-            key={patient.id}
-            whileHover={{ y: -5, transition: { duration: 0.2 } }}
-            className="bg-white dark:bg-slate-800 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-all duration-200 relative"
+    <div className="mb-4">
+      <h3 className="text-lg font-medium text-slate-800 dark:text-white mb-2">Recently Assigned</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {recentPatients.map(patient => (
+          <div 
+            key={patient.id} 
+            className="p-4 bg-white dark:bg-slate-700/70 rounded-xl border border-slate-200 dark:border-slate-700 shadow hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => onViewPatientDetails(patient.id)}
           >
-            {/* "New Patient" badge */}
-            {patient.isNew && (
-              <div className="absolute top-0 right-0">
-                <div className="bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg shadow-md">
-                  NEW
-                </div>
+            <div className="flex items-start">
+              <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mr-3">
+                {getInitials(patient)}
               </div>
-            )}
-            
-            <div className="p-5">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg font-semibold shadow-md relative overflow-hidden">
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 animate-pulse-slow"></div>
-                    <div className="absolute inset-[2px] rounded-full bg-white dark:bg-slate-800 flex items-center justify-center">
-                      <span className="text-lg font-medium text-indigo-700 dark:text-indigo-300 relative">
-                        {getInitials(patient)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white truncate">
-                    {getFullName(patient)}
-                  </h3>
-                  
-                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {patient.registration_number && (
-                      <p className="truncate">#{patient.registration_number}</p>
-                    )}
-                    <div className="flex items-center mt-1">
-                      <span className="inline-block bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 text-xs px-2 py-0.5 rounded">
-                        {calculateAge(patient.date_of_birth)} yrs
-                      </span>
-                      {patient.gender && (
-                        <span className="inline-block bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 text-xs px-2 py-0.5 rounded ml-2">
-                          {patient.gender}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">
-                    Assigned {formatRelativeTime(patient.assignedTimestamp || patient.created_at)}
+              <div>
+                <h4 className="font-medium text-slate-800 dark:text-white">{getFullName(patient)}</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {patient.registration_number || 'No Reg #'}
+                </p>
+                {patient.isNew && (
+                  <span className="mt-1 inline-block px-1.5 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-xs rounded">
+                    New
                   </span>
-                  
-                  <button 
-                    onClick={() => onViewPatientDetails(patient.id)}
-                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
-                  >
-                    View Details
-                  </button>
-                </div>
+                )}
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </div>
   );
 };
 
-
-// Enhanced DoctorPatients component with highlighted new patients
-export default function DoctorPatients() {
-  // ... existing state variables
-  const [patients, setPatients] = useState([]);
+// Main PatientManagement component
+const PatientManagement = () => {
+  // State for patient management
   const [allPatients, setAllPatients] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [patients, setPatients] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [patientsPerPage] = useState(10);
   const [totalPatients, setTotalPatients] = useState(0);
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [showDevToolsNotice, setShowDevToolsNotice] = useState(false);
-  
-  // Modal States
-  const [showNewRecordModal, setShowNewRecordModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showMedicalRecordsModal, setShowMedicalRecordsModal] = useState(false);
-  const [showViewRecordModal, setShowViewRecordModal] = useState(false);
-  const [showEditRecordModal, setShowEditRecordModal] = useState(false);
-  
-  // Medical Records States
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [operationSuccess, setOperationSuccess] = useState('');
   const [patientRecords, setPatientRecords] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [editRecordData, setEditRecordData] = useState(null);
-  const [loadingRecords, setLoadingRecords] = useState(false);
-  const [recordsError, setRecordsError] = useState('');
-  const [updatingRecord, setUpdatingRecord] = useState(false);
-  
-  // Form & Operation States
   const [newRecord, setNewRecord] = useState({
     diagnosis: '',
     treatment: '',
@@ -1039,98 +794,108 @@ export default function DoctorPatients() {
     is_active: true
   });
   const [medicationInput, setMedicationInput] = useState('');
-  
-  // Form Validation States
-  const [formTouched, setFormTouched] = useState({});
-  const [editFormTouched, setEditFormTouched] = useState({});
-  
-  // Status States
-  const [submitting, setSubmitting] = useState(false);
-  const [loadingDetails, setLoadingDetails] = useState(false);
   const [formError, setFormError] = useState('');
-  const [detailsError, setDetailsError] = useState('');
-  const [operationSuccess, setOperationSuccess] = useState('');
+  const [formTouched, setFormTouched] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [editRecordData, setEditRecordData] = useState(null);
   const [editRecordError, setEditRecordError] = useState('');
+  const [editFormTouched, setEditFormTouched] = useState({});
+  const [updatingRecord, setUpdatingRecord] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [recordsError, setRecordsError] = useState('');
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showMedicalRecordsModal, setShowMedicalRecordsModal] = useState(false);
+  const [showViewRecordModal, setShowViewRecordModal] = useState(false);
+  const [showEditRecordModal, setShowEditRecordModal] = useState(false);
+  const [showNewRecordModal, setShowNewRecordModal] = useState(false);
   
-  // Theme state
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  // Determine if we're in dark mode
+  const [isDarkMode, setIsDarkMode] = useState(
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
   
-  const { user } = useAuth(); // Assuming this provides the logged-in doctor's information
-  const patientsPerPage = 10;
-  
-  // Helper function to get full name from first and last name
-  const getFullName = (patient) => {
-    if (patient.first_name && patient.last_name) {
-      return `${patient.first_name} ${patient.last_name}`;
-    } else if (patient.first_name) {
-      return patient.first_name;
-    } else if (patient.last_name) {
-      return patient.last_name;
-    } else {
-      return "No Name";
-    }
-  };
-  
-  // Helper function to get initials from name
-  const getInitials = (patient) => {
-    const name = getFullName(patient);
-    return name === "No Name" ? "?" : name.split(' ').map(n => n[0]).join('');
-  };
-  
-  // Helper function to calculate age from date of birth
-  const calculateAge = (dateOfBirthStr) => {
-    if (!dateOfBirthStr) return "N/A";
-    
-    const dob = new Date(dateOfBirthStr);
-    const ageDifMs = Date.now() - dob.getTime();
-    const ageDate = new Date(ageDifMs);
-    return Math.abs(ageDate.getUTCFullYear() - 1970);
-  };
-
-  // Helper function to format date
-  const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  // Check if React DevTools is installed
+  // Listen for dark mode changes
   useEffect(() => {
-    const checkDevTools = () => {
-      const hasDevTools = 
-        typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' || 
-        !!window.__REACT_DEVTOOLS_ATTACH__;
-      setShowDevToolsNotice(!hasDevTools);
+    const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleDarkModeChange = (e) => {
+      setIsDarkMode(e.matches);
     };
     
-    checkDevTools();
-  }, []);
-
-  // Check for dark mode preference
-  useEffect(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.documentElement.classList.add('dark');
-      setIsDarkMode(true);
-    }
+    darkModeMediaQuery.addEventListener('change', handleDarkModeChange);
     
-    const darkModeListener = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleDarkModeChange = (event) => {
-      if (event.matches) {
-        document.documentElement.classList.add('dark');
-        setIsDarkMode(true);
-      } else {
-        document.documentElement.classList.remove('dark');
-        setIsDarkMode(false);
-      }
-    };
-    
-    darkModeListener.addEventListener('change', handleDarkModeChange);
     return () => {
-      darkModeListener.removeEventListener('change', handleDarkModeChange);
+      darkModeMediaQuery.removeEventListener('change', handleDarkModeChange);
     };
   }, []);
+  
+  // Get auth context
+  const { user } = useAuth();
+  
+  // Helper functions
+  const getFullName = (patient) => {
+    if (!patient) return 'Unknown Patient';
+    const firstName = patient.first_name || '';
+    const lastName = patient.last_name || '';
+    
+    if (firstName && lastName) return `${firstName} ${lastName}`;
+    if (firstName) return firstName;
+    if (lastName) return lastName;
+    
+    return 'Unknown Patient';
+  };
+  
+  const getInitials = (patient) => {
+    if (!patient) return '?';
+    const firstName = patient.first_name || '';
+    const lastName = patient.last_name || '';
+    
+    if (firstName && lastName) return `${firstName.charAt(0)}${lastName.charAt(0)}`;
+    if (firstName) return firstName.charAt(0);
+    if (lastName) return lastName.charAt(0);
+    
+    return '?';
+  };
+  
+  const calculateAge = (dateOfBirth) => {
+    if (!dateOfBirth) return 'N/A';
+    
+    const birthDate = new Date(dateOfBirth);
+    const today = new Date();
+    
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDifference = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return isNaN(age) ? 'N/A' : age;
+  };
+  
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid Date';
+    }
+  };
 
   // Handle new patient assignment from notification
   const handleNewPatientAssigned = (patient) => {
+    // Only process patients with a valid id
+    if (!patient || !patient.id) {
+      console.log('Skipping patient without ID:', patient);
+      return;
+    }
+
+    console.log('Adding/updating patient:', patient);
+    
     // Check if patient already exists
     const patientExists = allPatients.some(p => p.id === patient.id);
     
@@ -1143,20 +908,13 @@ export default function DoctorPatients() {
       // Add new patient to the list
       setAllPatients(prev => [patient, ...prev]);
     }
-    
-    toast.success(`New patient assigned: ${getFullName(patient)}`, {
-      position: "top-right",
-      autoClose: 5000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-    });
   };
 
   // Method to view patient details (used by notification center)
   const handleViewPatientDetails = (patientId) => {
-    viewPatientDetails(patientId);
+    if (patientId) {
+      viewPatientDetails(patientId);
+    }
   };
 
   // Get recently assigned patients (with isNew flag or assignedTimestamp)
@@ -1213,7 +971,7 @@ export default function DoctorPatients() {
     });
     
     return sortedPatients.slice(startIndex, endIndex);
-  }, [filteredPatients, currentPage]);
+  }, [filteredPatients, currentPage, patientsPerPage]);
 
   // Update total patients count and current page when filters change
   useEffect(() => {
@@ -1222,7 +980,7 @@ export default function DoctorPatients() {
     if (currentPage !== 1 && filteredPatients.length <= patientsPerPage) {
       setCurrentPage(1);
     }
-  }, [filteredPatients, currentPage]);
+  }, [filteredPatients, currentPage, patientsPerPage]);
 
   // Fetch all patients on initial load
   useEffect(() => {
@@ -1763,6 +1521,8 @@ export default function DoctorPatients() {
                 <RecentPatientCards 
                   patients={recentlyAssignedPatients} 
                   onViewPatientDetails={handleViewPatientDetails}
+                  getInitials={getInitials}
+                  getFullName={getFullName}
                 />
               </div>
             )}
@@ -3075,7 +2835,6 @@ export default function DoctorPatients() {
         </motion.div>
       </div>
       
-      
       {/* Add custom CSS animations */}
       <style jsx>{`
         @keyframes gradient-shift {
@@ -3125,4 +2884,6 @@ export default function DoctorPatients() {
       `}</style>
     </div>
   );
-}
+};
+
+export default PatientManagement;
