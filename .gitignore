@@ -1,0 +1,15 @@
+# Exclude Android SDK if it accidentally lives in your project tree
+Sdk/
+platforms/
+# Or more broadly:
+**/Android/Sdk/**
+
+# Windows cache & system files
+AppData/
+*.jtx
+
+# Common noise
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,188 @@
+version: '3.8'
+
+services:
+  # Database for auth_service
+  auth_db:
+    image: postgres:15
+    container_name: auth_db
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: auth_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+      - ./auth_service/app/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Database for cardroom_service
+  cardroom_db:
+    image: postgres:15
+    container_name: cardroom_db
+    environment:
+      POSTGRES_USER: cardroom_user
+      POSTGRES_PASSWORD: cardroom123
+      POSTGRES_DB: cardroom_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - cardroom_postgres_data:/var/lib/postgresql/data
+      - ./cardroom_service/app/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cardroom_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Database for doctor_service
+  doctor_db:
+    image: postgres:15
+    container_name: doctor_db
+    environment:
+      POSTGRES_USER: doctor_user
+      POSTGRES_PASSWORD: doctor123
+      POSTGRES_DB: doctor_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - doctor_postgres_data:/var/lib/postgresql/data
+      - ./doctor_service/app/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doctor_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  labroom_db:
+    image: postgres:15
+    container_name: labroom_db
+    environment:
+      POSTGRES_USER: labroom_user
+      POSTGRES_PASSWORD: labroom123
+      POSTGRES_DB: labroom_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - labroom_postgres_data:/var/lib/postgresql/data
+      - ./labroom_service/app/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labroom_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth_service:
+    build: ./auth_service
+    container_name: auth_service
+    environment:
+      - DATABASE_URL=postgresql://auth_user:admin123@auth_db:5432/auth_db
+      - SECRET_KEY=your-secret-key-change-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - DOCTOR_SERVICE_URL=http://doctor_service:8024
+      - LAB_SERVICE_URL=http://labroom_service:8025
+    ports:
+      - "8022:8022"
+    depends_on:
+      auth_db:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  cardroom_service:
+    build: ./cardroom_service
+    container_name: cardroom_service
+    environment:
+      - DATABASE_URL=postgresql://cardroom_user:cardroom123@cardroom_db:5432/cardroom_db
+      - SECRET_KEY=your-secret-key-change-in-production
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - AUTH_SERVICE_URL=http://auth_service:8022
+      - DOCTOR_SERVICE_URL=http://doctor_service:8024
+    ports:
+      - "8023:8023"
+    depends_on:
+      cardroom_db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+
+    networks:
+      - app-network
+
+  # Doctor service (correctly indented under services)
+  doctor_service:
+    build: ./doctor_service
+    container_name: doctor_service
+    environment:
+      - DATABASE_URL=postgresql://doctor_user:doctor123@doctor_db:5432/doctor_db
+      - SECRET_KEY=your-secret-key-change-in-production
+      - JWT_SECRET_KEY=your_secure_secret_key_at_least_32_chars_long
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - AUTH_SERVICE_URL=http://auth_service:8022
+      - CARDROOM_SERVICE_URL=http://cardroom_service:8023  # Add this line
+      - LAB_SERVICE_URL=http://labroom_service:8025  # Add this line
+      - APP_PORT=8024
+    ports:
+      - "8024:8024"
+    depends_on:
+      doctor_db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+      cardroom_service:
+        condition: service_started
+    networks:
+      - app-network
+
+  # New labroom service
+  labroom_service:
+    build: ./labroom_service
+    container_name: labroom_service
+    environment:
+      - DATABASE_URL=postgresql://labroom_user:labroom123@labroom_db:5432/labroom_db
+      - SECRET_KEY=your-secret-key-change-in-production
+      - SERVICE_TOKEN=${SERVICE_TOKEN}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - AUTH_SERVICE_URL=http://auth_service:8022
+      - LAB_SERVICE_URL=http://labroom_service:8025
+      - DOCTOR_SERVICE_URL=http://doctor_service:8024
+      - APP_PORT=8025
+    ports:
+      - "8025:8025"
+    depends_on:
+      labroom_db:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+      doctor_service:
+        condition: service_started
+    networks:
+      - app-network
+
+# Networks declaration
+networks:
+  app-network:
+    driver: bridge
+
+# Volumes declaration (updated with labroom volume)
+volumes:
+  auth_postgres_data:
+  cardroom_postgres_data:
+  doctor_postgres_data:
+  labroom_postgres_data:
+  

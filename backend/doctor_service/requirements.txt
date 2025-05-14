@@ -1,0 +1,29 @@
+# Core
+fastapi==0.95.1 # Keep pinned if necessary, but consider upgrading if compatible
+uvicorn[standard]==0.22.0 # Keep pinned if necessary
+asyncpg==0.27.0
+pydantic==1.10.7 # Keep pinned if necessary
+python-dotenv==1.0.0
+
+# ML dependencies - MATCHED TO TRAINING ENV
+##joblib==1.3.2 # Match Colab (assumed from scikit-learn version)
+#xgboost==2.1.4 # Match Colab - ADD THIS LINE
+#catboost==1.2.8 # Match Colab - ADD THIS LINE
+#numpy==1.24.3 # Match Colab
+#pandas==2.0.3 # Match Colab
+#shap==0.47.2 # Match Colab
+
+# Other dependencies
+passlib==1.7.4
+python-jose==3.3.0
+python-multipart==0.0.6
+pyjwt==2.6.0
+email-validator==2.0.0
+gunicorn==20.1.0
+pillow==9.5.0
+aiokafka==0.8.0
+httpx==0.24.1
+reportlab==3.6.12
+onnxruntime>=1.15.1 # Only if needed for other AI models
+websockets==10.4
+python-dateutil>=2.8.2
