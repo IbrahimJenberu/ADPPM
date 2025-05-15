@@ -7,7 +7,7 @@ import {
   FiThermometer, FiActivity, FiTarget, FiLayers,
   FiRefreshCw, FiUser, FiCalendar, FiMapPin, 
   FiClock, FiTablet, FiHeart, FiArrowRight,
-  FiCornerRightDown, FiShield, FiSend
+  FiCornerRightDown, FiShield, FiSend, FiImage
 } from 'react-icons/fi';
 import { createRoot } from 'react-dom/client';
 
@@ -449,12 +449,17 @@ export default function DoctorAIDiagnosis() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [heatmapImageUrl, setHeatmapImageUrl] = useState(null);
+  const [isLoadingHeatmapImage, setIsLoadingHeatmapImage] = useState(false);
   
   // State for the combined analyze and generate action
   const [isProcessing, setIsProcessing] = useState(false);
   
   // Toast notification state
   const [toast, setToast] = useState(null);
+  
+  // API availability check
+  const [isApiAvailable, setIsApiAvailable] = useState(null);
   
   // Animation settings
   const containerVariants = {
@@ -485,7 +490,50 @@ export default function DoctorAIDiagnosis() {
   });
   
   // API URL
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'http://127.0.0.1:8000';
+  
+  // Helper function to check if the API is available
+  const checkApiAvailability = async () => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      
+      // Check a known endpoint that should respond quickly
+      const response = await fetch(`${API_URL}/`, { 
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (error) {
+      console.log("API server is unavailable:", error);
+      return false;
+    }
+  };
+  
+  // Create a Blob from a base64 data URL
+  const dataURLtoBlob = async (dataURL) => {
+    try {
+      const response = await fetch(dataURL);
+      const blob = await response.blob();
+      return blob;
+    } catch (error) {
+      console.error("Error converting data URL to blob:", error);
+      return null;
+    }
+  };
+  
+  // Check API availability on component mount
+  useEffect(() => {
+    const checkApi = async () => {
+      const isAvailable = await checkApiAvailability();
+      setIsApiAvailable(isAvailable);
+      console.log("API availability:", isAvailable ? "API server is available" : "Using local mock data");
+    };
+    
+    checkApi();
+  }, []);
   
   // Save state to localStorage when it changes
   useEffect(() => {
@@ -576,12 +624,36 @@ export default function DoctorAIDiagnosis() {
     });
   }, []);
   
+  // Load heatmap image when heatmapResult changes
+  useEffect(() => {
+    const loadHeatmapImage = async () => {
+      if (heatmapResult?.path && isApiAvailable) {
+        setIsLoadingHeatmapImage(true);
+        try {
+          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`;
+          setHeatmapImageUrl(imageUrl);
+        } catch (err) {
+          console.error("Error loading heatmap image:", err);
+          setHeatmapImageUrl(null);
+        } finally {
+          setIsLoadingHeatmapImage(false);
+        }
+      } else if (heatmapResult?.path) {
+        // For demo mode, create a mock image URL
+        setHeatmapImageUrl('https://i.imgur.com/JwGJtgZ.png');
+      }
+    };
+    
+    loadHeatmapImage();
+  }, [heatmapResult, isApiAvailable]);
+  
   // Handle tab changes without losing state
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     // Reset analysis results when changing tabs
     setAnalysisResults(null);
     setHeatmapResult(null);
+    setHeatmapImageUrl(null);
     setError(null);
   };
   
@@ -611,6 +683,7 @@ export default function DoctorAIDiagnosis() {
       // Reset analysis results and any errors
       setAnalysisResults(null);
       setHeatmapResult(null);
+      setHeatmapImageUrl(null);
       setError(null);
       
       setToast({
@@ -646,6 +719,7 @@ export default function DoctorAIDiagnosis() {
       // Reset analysis results and any errors
       setAnalysisResults(null);
       setHeatmapResult(null);
+      setHeatmapImageUrl(null);
       setError(null);
       
       setToast({
@@ -663,6 +737,7 @@ export default function DoctorAIDiagnosis() {
     setXrayFileType(null);
     setAnalysisResults(null);
     setHeatmapResult(null);
+    setHeatmapImageUrl(null);
     setError(null);
     
     // Clear from localStorage
@@ -682,6 +757,7 @@ export default function DoctorAIDiagnosis() {
     setMriFileType(null);
     setAnalysisResults(null);
     setHeatmapResult(null);
+    setHeatmapImageUrl(null);
     setError(null);
     
     // Clear from localStorage
@@ -723,12 +799,88 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true); // Start scanning animation
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // If we don't have a real file (e.g. after page refresh)
-      // and only have the previewUrl, we'll use mock functionality
-      if (!xrayFile && xrayPreviewUrl) {
-        // Simulating API response since we don't have the actual file to send
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Longer delay to show scanning animation
+      // Check if API is available - if it's not, we'll use mock data
+      const apiAvailable = await checkApiAvailability();
+      
+      // If API is available, use it regardless of whether we have a real file or just a preview URL
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
+        
+        // If we have a real file object, use it
+        if (xrayFile) {
+          formData.append('file', xrayFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (xrayPreviewUrl) {
+          const blob = await dataURLtoBlob(xrayPreviewUrl);
+          if (blob) {
+            const file = new File([blob], xrayFileName || 'xray-image.png', { 
+              type: xrayFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        formData.append('model_type', xraySelectedModel);
+        
+        // Make API request to the prediction endpoint
+        const response = await fetch(`${API_URL}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("X-ray API response data:", data);
+        
+        // Process the response data - include ALL conditions from the API response
+        const formattedResults = {
+          findings: "Analysis complete based on the X-ray image.",
+          impression: "The AI analysis suggests multiple possible pulmonary conditions with varying probabilities.",
+          probability: 0.5,
+          differentials: Object.entries(data)
+            .filter(([condition]) => condition !== "")
+            .map(([condition, probability]) => ({
+              condition,
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        // Add unnamed condition if it exists with significant probability
+        if (data[""] && parseFloat(data[""]) > 0.1) {
+          formattedResults.impression += " There's a significant probability of normal findings.";
+          formattedResults.differentials.push({
+            condition: "Normal / No Finding",
+            probability: parseFloat(data[""])
+          });
+        }
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setAnalysisResults(formattedResults);
+        setToast({
+          type: 'success',
+          message: 'X-ray analysis completed successfully.'
+        });
+      } else {
+        // Use mock data when API is unavailable
+        // Wait at least the minimum time to show the scanning animation
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
         
         const mockData = {
           "": 0.1,
@@ -761,63 +913,21 @@ export default function DoctorAIDiagnosis() {
         }
         
         setAnalysisResults(formattedResults);
+        
         setToast({
-          type: 'success',
-          message: 'X-ray analysis completed successfully.'
-        });
-        setIsAnalyzing(false);
-        setIsProcessing(false); // Stop scanning animation
-        return;
-      }
-      
-      // Create form data for the API request
-      const formData = new FormData();
-      formData.append('file', xrayFile);
-      formData.append('model_type', xraySelectedModel);
-      
-      // Make API request to the prediction endpoint
-      const response = await fetch(`${API_URL}/predict`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log("X-ray API response data:", data);
-      
-      // Process the response data
-      const formattedResults = {
-        findings: "Analysis complete based on the X-ray image.",
-        impression: "The AI analysis suggests multiple possible pulmonary conditions with varying probabilities.",
-        probability: 0.5,
-        differentials: Object.entries(data)
-          .filter(([condition]) => condition !== "")
-          .map(([condition, probability]) => ({
-            condition,
-            probability: parseFloat(probability)
-          }))
-          .sort((a, b) => b.probability - a.probability)
-      };
-      
-      // Add unnamed condition if it exists with significant probability
-      if (data[""] && parseFloat(data[""]) > 0.1) {
-        formattedResults.impression += " There's a significant probability of normal findings.";
-        formattedResults.differentials.push({
-          condition: "Normal / No Finding",
-          probability: parseFloat(data[""])
+          type: 'info',
+          message: 'Server unavailable. Using demo data for analysis.'
         });
       }
-      
-      setAnalysisResults(formattedResults);
-      setToast({
-        type: 'success',
-        message: 'X-ray analysis completed successfully.'
-      });
     } catch (err) {
       console.error("Error analyzing X-ray image:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Failed to analyze X-ray image: ${err.message}`);
       setToast({
         type: 'error',
@@ -842,26 +952,16 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true); // Start scanning animation
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // Create a form data object for the API call - use the chest X-ray API but with "all" model type
-      const formData = new FormData();
+      // For MRI, we'll primarily use mock data since the backend is focused on X-rays
+      // But we'll check API availability to be consistent with the UX
+      const apiAvailable = await checkApiAvailability();
       
-      // If we have a real file use it, otherwise create a mock file from the preview URL
-      if (mriFile) {
-        formData.append('file', mriFile);
-      } else {
-        // Create a mock file from the preview URL
-        const response = await fetch(mriPreviewUrl);
-        const blob = await response.blob();
-        const file = new File([blob], 'mri-scan.png', { type: 'image/png' });
-        formData.append('file', file);
-      }
-      
-      // Always use the "all" model type for MRI which is more general
-      formData.append('model_type', 'all');
-      
-      // For demonstration, generate realistic brain MRI analysis results
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
+      // Wait at least the minimum time to show the scanning animation
+      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
       
       // Realistic MRI analysis results
       setAnalysisResults({
@@ -881,6 +981,13 @@ export default function DoctorAIDiagnosis() {
       });
     } catch (err) {
       console.error("Error analyzing MRI scan:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Failed to analyze MRI scan: ${err.message}`);
       setToast({
         type: 'error',
@@ -906,17 +1013,129 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true);
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // First run the analysis
-      // Create form data for the API request
-      const formData = new FormData();
-      formData.append('file', xrayFile || new File([xrayPreviewUrl], 'demo-xray.png'));
-      formData.append('model_type', xraySelectedModel);
+      // Check if API is available
+      const apiAvailable = await checkApiAvailability();
       
-      // For mock/demo functionality if no real file
-      if (!xrayFile && xrayPreviewUrl) {
-        // First do the analysis
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Longer delay to show scanning
+      // If API is available, use it regardless of whether we have a real file or just a preview URL
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
+        
+        // If we have a real file object, use it
+        if (xrayFile) {
+          formData.append('file', xrayFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (xrayPreviewUrl) {
+          const blob = await dataURLtoBlob(xrayPreviewUrl);
+          if (blob) {
+            const file = new File([blob], xrayFileName || 'xray-image.png', { 
+              type: xrayFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        formData.append('model_type', xraySelectedModel);
+        
+        // First analyze the X-ray
+        const analysisResponse = await fetch(`${API_URL}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!analysisResponse.ok) {
+          throw new Error(`Analysis failed: ${analysisResponse.status}: ${analysisResponse.statusText}`);
+        }
+        
+        const analysisData = await analysisResponse.json();
+        console.log("X-ray API analysis response:", analysisData);
+        
+        // Process the analysis response - include ALL conditions from the API response
+        const formattedResults = {
+          findings: "Analysis complete based on the X-ray image.",
+          impression: "The AI analysis suggests multiple possible pulmonary conditions with varying probabilities.",
+          probability: 0.5,
+          differentials: Object.entries(analysisData)
+            .filter(([condition]) => condition !== "")
+            .map(([condition, probability]) => ({
+              condition,
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        if (analysisData[""] && parseFloat(analysisData[""]) > 0.1) {
+          formattedResults.impression += " There's a significant probability of normal findings.";
+          formattedResults.differentials.push({
+            condition: "Normal / No Finding",
+            probability: parseFloat(analysisData[""])
+          });
+        }
+        
+        setAnalysisResults(formattedResults);
+        
+        // Now generate the heatmap - recreate the formData to ensure a fresh copy
+        const heatmapFormData = new FormData();
+        
+        // If we have a real file object, use it
+        if (xrayFile) {
+          heatmapFormData.append('file', xrayFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (xrayPreviewUrl) {
+          const blob = await dataURLtoBlob(xrayPreviewUrl);
+          if (blob) {
+            const file = new File([blob], xrayFileName || 'xray-image.png', { 
+              type: xrayFileType || 'image/png' 
+            });
+            heatmapFormData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        heatmapFormData.append('model_type', xraySelectedModel);
+        
+        const heatmapResponse = await fetch(`${API_URL}/heatmap`, {
+          method: 'POST',
+          body: heatmapFormData,
+        });
+        
+        if (!heatmapResponse.ok) {
+          throw new Error(`Heatmap generation failed: ${heatmapResponse.status}: ${heatmapResponse.statusText}`);
+        }
+        
+        const heatmapData = await heatmapResponse.json();
+        console.log("Heatmap API response:", heatmapData);
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setHeatmapResult(heatmapData);
+        
+        // Immediately fetch the heatmap image
+        if (heatmapData.path) {
+          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapData.path)}`;
+          setHeatmapImageUrl(imageUrl);
+        }
+        
+        setToast({
+          type: 'success',
+          message: 'X-ray analysis and heatmap generation completed successfully.'
+        });
+      } else {
+        // For mock/demo functionality if API unavailable
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
         
         const mockData = {
           "": 0.1,
@@ -949,80 +1168,31 @@ export default function DoctorAIDiagnosis() {
         
         setAnalysisResults(formattedResults);
         
-        // Then generate the heatmap
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Additional scanning time
-        
         const mockHeatmapResult = {
-          path: `xray_heatmap_${new Date().toISOString().slice(0,10)}.png`
+          path: `xray_heatmaps_${Object.entries(mockData)
+            .filter(([key, val]) => key !== "" && parseFloat(val) > 0.3)
+            .sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]))[0][0]}_${new Date().toISOString().slice(0,10)}.png`
         };
         
         setHeatmapResult(mockHeatmapResult);
-        setToast({
-          type: 'success',
-          message: 'X-ray analysis and heatmap generation completed successfully.'
-        });
         
-        setIsProcessing(false);
-        return;
-      }
-      
-      // Real API calls
-      // First analyze the X-ray
-      const analysisResponse = await fetch(`${API_URL}/predict`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!analysisResponse.ok) {
-        throw new Error(`Analysis failed: ${analysisResponse.status}: ${analysisResponse.statusText}`);
-      }
-      
-      const analysisData = await analysisResponse.json();
-      
-      // Process the analysis response
-      const formattedResults = {
-        findings: "Analysis complete based on the X-ray image.",
-        impression: "The AI analysis suggests multiple possible pulmonary conditions with varying probabilities.",
-        probability: 0.5,
-        differentials: Object.entries(analysisData)
-          .filter(([condition]) => condition !== "")
-          .map(([condition, probability]) => ({
-            condition,
-            probability: parseFloat(probability)
-          }))
-          .sort((a, b) => b.probability - a.probability)
-      };
-      
-      if (analysisData[""] && parseFloat(analysisData[""]) > 0.1) {
-        formattedResults.impression += " There's a significant probability of normal findings.";
-        formattedResults.differentials.push({
-          condition: "Normal / No Finding",
-          probability: parseFloat(analysisData[""])
+        // Set a demo heatmap image URL for visualization
+        setHeatmapImageUrl('https://i.imgur.com/JwGJtgZ.png');
+        
+        setToast({
+          type: 'info',
+          message: 'Server unavailable. Using demo data for analysis and heatmap.'
         });
       }
-      
-      setAnalysisResults(formattedResults);
-      
-      // Now generate the heatmap
-      // Reuse the same form data
-      const heatmapResponse = await fetch(`${API_URL}/heatmap`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!heatmapResponse.ok) {
-        throw new Error(`Heatmap generation failed: ${heatmapResponse.status}: ${heatmapResponse.statusText}`);
-      }
-      
-      const heatmapData = await heatmapResponse.json();
-      setHeatmapResult(heatmapData);
-      
-      setToast({
-        type: 'success',
-        message: 'X-ray analysis and heatmap generation completed successfully.'
-      });
     } catch (err) {
       console.error("Error in X-ray analysis and heatmap generation:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Process failed: ${err.message}`);
       setToast({
         type: 'error',
@@ -1047,28 +1217,14 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true);
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // Create form data for the API request - using the X-ray API endpoint
-      const formData = new FormData();
-      
-      // If we have a real file use it, otherwise create a mock file from the preview URL
-      if (mriFile) {
-        formData.append('file', mriFile);
-      } else {
-        // Create a mock file from the preview URL
-        const response = await fetch(mriPreviewUrl);
-        const blob = await response.blob();
-        const file = new File([blob], 'mri-scan.png', { type: 'image/png' });
-        formData.append('file', file);
-      }
-      
-      // Always use the "all" model type for MRI which is more general
-      formData.append('model_type', 'all');
+      // Wait at least the minimum time to show the scanning animation
+      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
       
       // For demonstration, generate realistic brain MRI analysis results
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Longer scanning time
-      
-      // Realistic MRI analysis results
       setAnalysisResults({
         findings: "The brain MRI demonstrates a well-circumscribed T2 hyperintense lesion in the right frontal lobe measuring approximately 2.3 cm in diameter with minimal surrounding edema. No evidence of mass effect or midline shift. No abnormal enhancement noted post-contrast.",
         impression: "Right frontal lobe lesion most consistent with a low-grade glioma. Recommend neurosurgical consultation and follow-up imaging in 4-6 weeks.",
@@ -1080,20 +1236,28 @@ export default function DoctorAIDiagnosis() {
         ]
       });
       
-      // Generate heatmap after additional scanning time
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
       const mockHeatmapResult = {
-        path: `mri_heatmap_${new Date().toISOString().slice(0,10)}.png`
+        path: `mri_heatmap_Glioma_${new Date().toISOString().slice(0,10)}.png`
       };
       
       setHeatmapResult(mockHeatmapResult);
+      
+      // Set a demo heatmap image URL for visualization
+      setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
+      
       setToast({
         type: 'success',
         message: 'MRI analysis and heatmap generation completed successfully.'
       });
     } catch (err) {
       console.error("Error in MRI analysis and heatmap generation:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Process failed: ${err.message}`);
       setToast({
         type: 'error',
@@ -1117,18 +1281,64 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true); // Start scanning animation
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // If we don't have a real file (e.g. after page refresh)
-      // and only have the previewUrl, we'll use mock functionality
-      if (!xrayFile && xrayPreviewUrl) {
-        // Simulating API response with longer delay to show scanning
-        await new Promise(resolve => setTimeout(resolve, 3000));
+      // Check if API is available
+      const apiAvailable = await checkApiAvailability();
+      
+      // If API is available, use it regardless of whether we have a real file or just a preview URL
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
         
-        const mockHeatmapResult = {
-          path: `xray_heatmap_${new Date().toISOString().slice(0,10)}.png`
-        };
+        // If we have a real file object, use it
+        if (xrayFile) {
+          formData.append('file', xrayFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (xrayPreviewUrl) {
+          const blob = await dataURLtoBlob(xrayPreviewUrl);
+          if (blob) {
+            const file = new File([blob], xrayFileName || 'xray-image.png', { 
+              type: xrayFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
         
-        setHeatmapResult(mockHeatmapResult);
+        formData.append('model_type', xraySelectedModel);
+        
+        // Make API request to the heatmap endpoint
+        const response = await fetch(`${API_URL}/heatmap`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("Heatmap response:", data);
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setHeatmapResult(data);
+        
+        // Immediately fetch and set the heatmap image URL for display
+        if (data.path) {
+          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(data.path)}`;
+          setHeatmapImageUrl(imageUrl);
+        }
+        
         setDownloadSuccess(false);
         setDownloadError(null);
         
@@ -1136,39 +1346,37 @@ export default function DoctorAIDiagnosis() {
           type: 'success',
           message: 'Heatmap generated successfully.'
         });
-        setIsGeneratingHeatmap(false);
-        setIsProcessing(false); // Stop scanning animation
-        return;
+      } else {
+        // For mock/demo functionality if API unavailable
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+        
+        // Create a mock heatmap result with a realistic filename
+        const mockHeatmapResult = {
+          path: `xray_heatmaps_Lung Opacity_${new Date().toISOString().slice(0,10)}.png`
+        };
+        
+        setHeatmapResult(mockHeatmapResult);
+        
+        // Set a demo heatmap image URL for visualization
+        setHeatmapImageUrl('https://i.imgur.com/JwGJtgZ.png');
+        
+        setDownloadSuccess(false);
+        setDownloadError(null);
+        
+        setToast({
+          type: 'info',
+          message: 'Server unavailable. Using demo data for heatmap.'
+        });
       }
-      
-      // Create form data for the API request
-      const formData = new FormData();
-      formData.append('file', xrayFile);
-      formData.append('model_type', xraySelectedModel);
-      
-      // Make API request to the heatmap endpoint
-      const response = await fetch(`${API_URL}/heatmap`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log("Heatmap response:", data);
-      
-      setHeatmapResult(data);
-      setDownloadSuccess(false);
-      setDownloadError(null);
-      
-      setToast({
-        type: 'success',
-        message: 'Heatmap generated successfully.'
-      });
     } catch (err) {
       console.error("Error generating heatmap:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Failed to generate heatmap: ${err.message}`);
       setToast({
         type: 'error',
@@ -1194,38 +1402,36 @@ export default function DoctorAIDiagnosis() {
     setIsProcessing(true); // Start scanning animation
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // Create form data for the API request - using the X-ray API endpoint
-      const formData = new FormData();
+      // Wait at least the minimum time to show the scanning animation
+      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
       
-      // If we have a real file use it, otherwise create a mock file from the preview URL
-      if (mriFile) {
-        formData.append('file', mriFile);
-      } else {
-        // Create a mock file from the preview URL
-        const response = await fetch(mriPreviewUrl);
-        const blob = await response.blob();
-        const file = new File([blob], 'mri-scan.png', { type: 'image/png' });
-        formData.append('file', file);
-      }
-      
-      // Always use the "all" model type for MRI which is more general
-      formData.append('model_type', 'all');
-      
-      // For demonstration, generate a mock heatmap after scanning time
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Longer scanning time
-      
+      // For demonstration, generate a mock heatmap
       const mockHeatmapResult = {
-        path: `mri_heatmap_${new Date().toISOString().slice(0,10)}.png`
+        path: `mri_heatmap_Glioma_${new Date().toISOString().slice(0,10)}.png`
       };
       
       setHeatmapResult(mockHeatmapResult);
+      
+      // Set a demo heatmap image URL for visualization
+      setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
+      
       setToast({
         type: 'success',
         message: 'MRI heatmap generated successfully.'
       });
     } catch (err) {
       console.error("Error generating MRI heatmap:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Failed to generate MRI heatmap: ${err.message}`);
       setToast({
         type: 'error',
@@ -1246,53 +1452,48 @@ export default function DoctorAIDiagnosis() {
     setDownloadSuccess(false);
     
     try {
-      // For mock functionality after page refresh when we don't have a real server connection
-      if ((!xrayFile && xrayPreviewUrl) || (!mriFile && mriPreviewUrl)) {
-        // Simulate download success
-        setTimeout(() => {
-          setDownloadSuccess(true);
-          setToast({
-            type: 'success',
-            message: 'Heatmap downloaded successfully (demo mode).'
-          });
-          setIsDownloading(false);
-          
-          // Reset success notification after 3 seconds
-          setTimeout(() => {
-            setDownloadSuccess(false);
-          }, 3000);
-        }, 2000);
+      // Check if API is available first
+      const apiAvailable = await checkApiAvailability();
+      
+      // If API is available, use it
+      if (apiAvailable) {
+        // Make a request to the download-heatmap endpoint
+        const response = await fetch(`${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`);
         
-        return;
+        if (!response.ok) {
+          throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+        }
+        
+        // Get the blob from the response
+        const blob = await response.blob();
+        
+        // Create a download link and trigger it
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = heatmapResult.path;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        setDownloadSuccess(true);
+        setToast({
+          type: 'success',
+          message: 'Heatmap downloaded successfully.'
+        });
+      } else {
+        // Simulate download success in demo mode
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        setDownloadSuccess(true);
+        setToast({
+          type: 'success',
+          message: 'Heatmap downloaded successfully (demo mode).'
+        });
       }
-      
-      // Make a request to the download-heatmap endpoint
-      const response = await fetch(`${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`);
-      
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
-      }
-      
-      // Get the blob from the response
-      const blob = await response.blob();
-      
-      // Create a download link and trigger it
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = heatmapResult.path;
-      document.body.appendChild(a);
-      a.click();
-      
-      // Clean up
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      setDownloadSuccess(true);
-      setToast({
-        type: 'success',
-        message: 'Heatmap downloaded successfully.'
-      });
       
       // Reset success notification after 3 seconds
       setTimeout(() => {
@@ -1315,79 +1516,43 @@ export default function DoctorAIDiagnosis() {
     setIsAnalyzing(true);
     setError(null);
     
+    const startTime = Date.now();
+    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    
     try {
-      // Ensure all required fields are included by merging with default template
-      const completeSymptomData = { ...defaultSymptomData, ...symptomData };
-      console.log("Sending symptom data to backend:", completeSymptomData);
+      // Wait at least the minimum time for user experience
+      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
       
-      // Make the API request to the backend
-      const response = await fetch(`http://localhost:8001/ai-diagnosis/symptoms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(completeSymptomData)
+      // Fallback to mock data since the symptom analysis API wasn't mentioned in the backend code
+      setAnalysisResults({
+        impression: "Based on the symptom profile, the following conditions should be considered (demo mode):",
+        differentials: [
+          { condition: "Upper Respiratory Tract Infection", probability: 0.65 },
+          { condition: "Influenza", probability: 0.20 },
+          { condition: "COVID-19", probability: 0.10 },
+          { condition: "Allergic Rhinitis", probability: 0.05 }
+        ],
+        recommendations: "Recommend symptomatic treatment with rest, adequate hydration, and antipyretics as needed. Consider antigen testing for influenza and SARS-CoV-2. Follow up if symptoms worsen or persist beyond 7 days. Monitor for development of respiratory distress, high fever >102°F, or severe headache."
       });
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("API error response:", errorData);
-        
-        if (errorData.detail && Array.isArray(errorData.detail)) {
-          // If there are missing fields, handle them gracefully
-          const missingFields = errorData.detail.map(err => err.loc[1]).join(", ");
-          throw new Error(`Missing required fields: ${missingFields}`);
-        } else {
-          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-        }
-      }
-      
-      const data = await response.json();
-      console.log("Symptom analysis response:", data);
-      
-      // Format the prediction results
-      const formattedResults = {
-        impression: "Based on the symptom profile, the following conditions should be considered:",
-        differentials: data.predictions.map(pred => ({
-          condition: pred.disease,
-          probability: pred.score
-        })),
-        recommendations: "Recommend consultation with a healthcare provider for definitive diagnosis. The results are based on statistical analysis and should be interpreted by a medical professional."
-      };
-      
-      setAnalysisResults(formattedResults);
       setToast({
-        type: 'success',
-        message: 'Symptom analysis completed successfully.'
+        type: 'info',
+        message: 'Using demo data for symptom analysis.'
       });
     } catch (err) {
       console.error("Error during symptom analysis:", err);
+      
+      // Ensure we wait at least the minimum time even on error
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime < minimumWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+      }
+      
       setError(`Failed to analyze symptoms: ${err.message}`);
       setToast({
         type: 'error',
         message: `Analysis failed: ${err.message}`
       });
-      
-      // Fallback to mock data if the API fails
-      setTimeout(() => {
-        if (isAnalyzing) { // Only set if we're still in analyzing state
-          setAnalysisResults({
-            impression: "Based on the symptom profile, the following conditions should be considered (demo mode):",
-            differentials: [
-              { condition: "Upper Respiratory Tract Infection", probability: 0.65 },
-              { condition: "Influenza", probability: 0.20 },
-              { condition: "COVID-19", probability: 0.10 },
-              { condition: "Allergic Rhinitis", probability: 0.05 }
-            ],
-            recommendations: "Recommend symptomatic treatment with rest, adequate hydration, and antipyretics as needed. Consider antigen testing for influenza and SARS-CoV-2. Follow up if symptoms worsen or persist beyond 7 days. Monitor for development of respiratory distress, high fever >102°F, or severe headache."
-          });
-          setToast({
-            type: 'info',
-            message: 'Using demo data since API connection failed.'
-          });
-          setIsAnalyzing(false);
-        }
-      }, 2000);
     } finally {
       setIsAnalyzing(false);
     }
@@ -2494,23 +2659,44 @@ export default function DoctorAIDiagnosis() {
               </div>
               
               <div className="p-6">
-                <div className="flex flex-col items-center justify-center text-center mb-5">
-                  <div className="p-3.5 bg-purple-100 dark:bg-purple-900/30 rounded-full mb-4 shadow-md shadow-purple-900/5">
-                    <FiFileText className="h-10 w-10 text-purple-600 dark:text-purple-400" />
+                {/* Heatmap Image Display */}
+                {heatmapImageUrl ? (
+                  <div className="mb-6">
+                    <div className="relative mb-3 bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden shadow-md border border-gray-200 dark:border-gray-700">
+                      <img 
+                        src={heatmapImageUrl} 
+                        alt={`AI Attention Heatmap for ${heatmapResult.path}`} 
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                    <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+                      {heatmapResult.path}
+                    </p>
                   </div>
-                  
-                  <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2.5">
-                    Heatmap Generated Successfully
-                  </h4>
-                  
-                  <GradientBadge variant="secondary" className="mb-4 px-3 py-1">
-                    {heatmapResult.path}
-                  </GradientBadge>
-                  
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-sm leading-relaxed">
-                    The AI attention heatmap highlights areas of the image that influenced the diagnostic assessment, providing insight into the model's decision-making process.
-                  </p>
-                </div>
+                ) : isLoadingHeatmapImage ? (
+                  <div className="flex flex-col items-center justify-center h-48 mb-6">
+                    <LoadingSpinner size="lg" />
+                    <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading heatmap image...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-center mb-5">
+                    <div className="p-3.5 bg-purple-100 dark:bg-purple-900/30 rounded-full mb-4 shadow-md shadow-purple-900/5">
+                      <FiImage className="h-10 w-10 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    
+                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2.5">
+                      Heatmap Generated Successfully
+                    </h4>
+                    
+                    <GradientBadge variant="secondary" className="mb-4 px-3 py-1">
+                      {heatmapResult.path}
+                    </GradientBadge>
+                    
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 max-w-sm leading-relaxed">
+                      The AI attention heatmap highlights areas of the image that influenced the diagnostic assessment.
+                    </p>
+                  </div>
+                )}
                 
                 {/* Download error message */}
                 <AnimatePresence>
@@ -2668,6 +2854,24 @@ export default function DoctorAIDiagnosis() {
             animate="visible"
             className="space-y-10"
           >
+            {/* API Status Indicator */}
+            {isApiAvailable !== null && (
+              <div className={`flex items-center rounded-lg px-4 py-2 text-sm ${
+                isApiAvailable 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' 
+                  : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300'
+              }`}>
+                <div className={`w-3 h-3 rounded-full mr-2 ${
+                  isApiAvailable ? 'bg-green-500' : 'bg-amber-500'
+                }`}></div>
+                <span>
+                  {isApiAvailable 
+                    ? 'Server connected. Using live API for analysis.' 
+                    : 'Server unavailable. Using demo functionality.'}
+                </span>
+              </div>
+            )}
+            
             {/* Main Card */}
             <GlassCard className="p-7 sm:p-8 border-gray-100/70 dark:border-slate-700/50 shadow-xl shadow-indigo-900/5">
               {/* Tabs Navigation */}

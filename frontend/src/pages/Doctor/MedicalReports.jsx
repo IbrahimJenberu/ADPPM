@@ -46,19 +46,20 @@ export default function DoctorMedicalReports() {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   
-  // NEW: View modes enum to control what content is displayed
+  // View modes enum to control what content is displayed
   const VIEW_MODES = {
     PATIENTS_LIST: 'patients_list',
     PATIENT_REPORTS: 'patient_reports'
   };
   
-  // NEW: Current view mode state - more reliable than using viewingPatient as a flag
+  // Current view mode state - more reliable than using viewingPatient as a flag
   const [currentView, setCurrentView] = useState(VIEW_MODES.PATIENTS_LIST);
   
   // Refs to prevent duplicate API calls and store cached patients
   const isFetchingRef = useRef(false);
   const patientsCacheRef = useRef([]);
   const initialLoadCompletedRef = useRef(false);
+  const isNavigatingBackRef = useRef(false);
   
   // Pagination state - removed pagination for reports
   const [currentPatientPage, setCurrentPatientPage] = useState(1);
@@ -287,38 +288,51 @@ export default function DoctorMedicalReports() {
     setCurrentView(VIEW_MODES.PATIENT_REPORTS);
   };
 
-  // Improved back navigation function with proper sequencing
+  // Completely revised back navigation function with explicit full UI repaint
   const handleBackToPatients = useCallback(() => {
-    console.log("Navigating back to patients list");
+    console.log("Navigating back to patients list with full UI reset");
     
-    // First reset the viewing patient - this needs to happen BEFORE changing views
-    // to prevent useEffect hooks from triggering in the wrong order
-    setViewingPatient(null);
+    // Set flag to indicate navigation is in progress
+    isNavigatingBackRef.current = true;
     
-    // Reset reports array and search
+    // Reset view state (except patients data for now)
     setReports([]);
     setSearchTerm("");
-    
-    // Reset pagination to first page
     setCurrentPatientPage(1);
     
-    // Ensure patients list is populated from cache before changing view
+    // Clear the viewing patient
+    setViewingPatient(null);
+        
+    // Instead of setting the current view immediately, first fully set up the patients view
     if (patientsCacheRef.current.length > 0) {
-      console.log("Pre-applying patients from cache before view change, count:", patientsCacheRef.current.length);
-      setPatients([...patientsCacheRef.current]);
-      // Update view without showing loading state
+      // Force patients data refill from cache with explicit new array instance
+      const cachedPatients = JSON.parse(JSON.stringify(patientsCacheRef.current));
+      console.log("Force restoring patients from deep copied cache, count:", cachedPatients.length);
+      
+      // Reset loading state
       setIsLoadingPatients(false);
-      setCurrentView(VIEW_MODES.PATIENTS_LIST);
+      
+      // Set data first
+      setPatients(cachedPatients);
+      
+      // Change view after a brief timeout to ensure state is applied
+      setTimeout(() => {
+        // Very important: we're doing a fresh render of the patients view
+        setCurrentView(VIEW_MODES.PATIENTS_LIST);
+        // Then signal we're done navigating
+        isNavigatingBackRef.current = false;
+      }, 50);
     } else {
-      // If no cache, show loading state and fetch
-      console.log("No cached patients, will fetch after view change");
+      // No cached data, show loading state and change view
+      console.log("No cached patients available, switching to loading state");
       setIsLoadingPatients(true);
       setCurrentView(VIEW_MODES.PATIENTS_LIST);
       
-      // Small delay before fetching to ensure view change completes first
+      // Fetch fresh data
       setTimeout(() => {
         fetchPatients();
-      }, 50);
+        isNavigatingBackRef.current = false;
+      }, 100);
     }
   }, []);
 
@@ -628,8 +642,18 @@ export default function DoctorMedicalReports() {
     return format?.toUpperCase() || "PDF";
   };
 
+  // Force reload patients from cache if empty but cache is available
+  useEffect(() => {
+    if (currentView === VIEW_MODES.PATIENTS_LIST && 
+        patients.length === 0 && 
+        patientsCacheRef.current.length > 0) {
+      console.log("Emergency restoration of patients from cache");
+      setPatients([...patientsCacheRef.current]);
+    }
+  }, [currentView, patients.length]);
+
   // Debug log to understand current view state
-  console.log("Current view:", currentView, "Patients count:", patients.length, "Cache size:", patientsCacheRef.current.length);
+  console.log("Current view:", currentView, "Patients count:", patients.length, "Cache size:", patientsCacheRef.current.length, "isNavigating:", isNavigatingBackRef.current);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-900 dark:to-gray-900 transition-colors duration-200 font-['Inter',system-ui,sans-serif]">
@@ -816,12 +840,14 @@ export default function DoctorMedicalReports() {
         {currentView === VIEW_MODES.PATIENT_REPORTS ? (
           /* Patient's Medical Reports View */
           <motion.div
+            key="patient-reports-view"
             initial="hidden"
             animate="visible"
             variants={containerVariants}
             className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/70 dark:border-slate-700/50 overflow-hidden transition-all duration-200"
+            style={{ backgroundColor: isDarkMode ? 'rgb(30, 41, 59)' : 'white' }}
           >
-            <div className="p-6 border-b border-gray-200 dark:border-slate-700">
+            <div className="p-6 border-b border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex items-center">
                   <motion.button
@@ -841,19 +867,19 @@ export default function DoctorMedicalReports() {
                       </span>
                     </h1>
                     <div className="flex items-center mt-1.5 text-gray-600 dark:text-gray-400">
-                      <div className={`flex-shrink-0 h-9 w-9 rounded-full ${getAvatarColor(viewingPatient.name || viewingPatient.first_name)} flex items-center justify-center font-semibold mr-2 text-sm text-white shadow-sm`}>
-                        {(viewingPatient.name || viewingPatient.first_name)
+                      <div className={`flex-shrink-0 h-9 w-9 rounded-full ${getAvatarColor(viewingPatient?.name || viewingPatient?.first_name)} flex items-center justify-center font-semibold mr-2 text-sm text-white shadow-sm`}>
+                        {(viewingPatient?.name || viewingPatient?.first_name)
                           ?.split(" ")
                           .map((n) => n[0])
                           .join("") || ""}
                       </div>
                       <span className="text-base font-medium text-gray-800 dark:text-gray-100">
-                        {viewingPatient.name || viewingPatient.first_name}
+                        {viewingPatient?.name || viewingPatient?.first_name}
                       </span>
                       <span className="mx-2 text-gray-400 dark:text-gray-600">•</span>
-                      <span className="text-sm">{viewingPatient.age} y.o.</span>
+                      <span className="text-sm">{viewingPatient?.age} y.o.</span>
                       <span className="mx-2 text-gray-400 dark:text-gray-600">•</span>
-                      <span className="text-sm">{viewingPatient.gender}</span>
+                      <span className="text-sm">{viewingPatient?.gender}</span>
                     </div>
                   </div>
                 </div>
@@ -891,7 +917,7 @@ export default function DoctorMedicalReports() {
             </div>
 
             {isLoadingReports ? (
-              <div className="flex justify-center py-16">
+              <div className="flex justify-center py-16 bg-white dark:bg-slate-800">
                 <div className="flex flex-col items-center">
                   <div className="h-12 w-12 relative">
                     <div className="absolute top-0 left-0 right-0 bottom-0 border-4 border-teal-200/30 dark:border-teal-900/20 rounded-full"></div>
@@ -901,7 +927,7 @@ export default function DoctorMedicalReports() {
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto bg-white dark:bg-slate-800">
                 {filteredReports.length > 0 ? (
                   <>
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
@@ -950,7 +976,7 @@ export default function DoctorMedicalReports() {
                                   <FiUser size={12} />
                                 </div>
                                 <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {report.doctor_name || 'Dr. ' + user.name}
+                                  {report.doctor_name || 'Dr. ' + user?.name}
                                 </span>
                               </div>
                             </td>
@@ -986,7 +1012,7 @@ export default function DoctorMedicalReports() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="flex flex-col items-center justify-center py-16 text-center px-6"
+                    className="flex flex-col items-center justify-center py-16 text-center px-6 bg-white dark:bg-slate-800"
                   >
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-slate-100 to-blue-50 dark:from-slate-800 dark:to-blue-900/30 flex items-center justify-center mb-4 shadow-inner">
                       <FiFile className="w-12 h-12 text-blue-500 dark:text-blue-400" />
@@ -1036,6 +1062,7 @@ export default function DoctorMedicalReports() {
             animate="visible"
             variants={containerVariants}
             className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-200/70 dark:border-slate-700/50 overflow-hidden transition-all duration-200"
+            style={{ backgroundColor: isDarkMode ? 'rgb(30, 41, 59)' : 'white' }}
           >
             <div className="p-6 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-teal-50 via-sky-50 to-white dark:from-teal-900/20 dark:via-sky-900/10 dark:to-slate-800">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1082,7 +1109,7 @@ export default function DoctorMedicalReports() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end px-6 py-2 border-b border-gray-200 dark:border-slate-700/30">
+            <div className="flex items-center justify-end px-6 py-2 border-b border-gray-200 dark:border-slate-700/30 bg-white dark:bg-slate-800">
               <motion.button 
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -1104,7 +1131,7 @@ export default function DoctorMedicalReports() {
             </div>
 
             {isLoadingPatients ? (
-              <div className="flex justify-center py-16">
+              <div className="flex justify-center py-16 bg-white dark:bg-slate-800">
                 <div className="flex flex-col items-center">
                   <div className="h-12 w-12 relative">
                     <div className="absolute top-0 left-0 right-0 bottom-0 border-4 border-teal-200/30 dark:border-teal-900/20 rounded-full"></div>
@@ -1114,8 +1141,8 @@ export default function DoctorMedicalReports() {
                 </div>
               </div>
             ) : (
-              <div>
-                {patients.length > 0 ? (
+              <div className="bg-white dark:bg-slate-800">
+                {patientsCacheRef.current.length > 0 ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 p-4" ref={patientListRef}>
                       {currentPatients.map((patient, i) => (
@@ -1186,7 +1213,7 @@ export default function DoctorMedicalReports() {
                     
                     {/* Pagination for Patients */}
                     {totalPatientPages > 1 && (
-                      <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex justify-center">
+                      <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 flex justify-center bg-white dark:bg-slate-800">
                         <nav className="flex items-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
                           <motion.button
                             whileHover={currentPatientPage !== 1 ? { scale: 1.05 } : {}}
@@ -1242,7 +1269,7 @@ export default function DoctorMedicalReports() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="flex flex-col items-center justify-center py-16 text-center px-6"
+                    className="flex flex-col items-center justify-center py-16 text-center px-6 bg-white dark:bg-slate-800"
                   >
                     <div className="w-24 h-24 rounded-full bg-gradient-to-br from-slate-100 to-blue-50 dark:from-slate-800 dark:to-blue-900/30 flex items-center justify-center mb-4 shadow-inner">
                       <FiUser className="w-12 h-12 text-blue-500 dark:text-blue-400" />
@@ -1315,7 +1342,7 @@ export default function DoctorMedicalReports() {
                   </div>
                 </div>
 
-                <div className="p-6">
+                <div className="p-6 bg-white dark:bg-slate-800">
                   <div className="mb-6">
                     <div className="relative">
                       <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
@@ -1490,7 +1517,7 @@ export default function DoctorMedicalReports() {
                   </div>
                 </div>
 
-                <div className="overflow-y-auto custom-scrollbar p-6 flex-grow">
+                <div className="overflow-y-auto custom-scrollbar p-6 flex-grow bg-white dark:bg-slate-800">
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-xl mb-6 border border-blue-100 dark:border-blue-900/30 flex items-center">
                     <div className={`flex-shrink-0 h-14 w-14 rounded-lg ${getAvatarColor(selectedPatient.name || selectedPatient.first_name)} flex items-center justify-center text-lg font-semibold text-white shadow-md mr-4 transition-transform duration-300 hover:scale-110`}>
                       {(selectedPatient.name || selectedPatient.first_name)
