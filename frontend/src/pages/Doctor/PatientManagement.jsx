@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
-  FiSearch, FiFilter, FiUser, FiEdit, FiFileText, FiSave, 
+  FiSearch, FiUser, FiEdit, FiFileText, FiSave, 
   FiAlertCircle, FiCheckCircle, FiEye, FiPlus, FiMinus, 
   FiList, FiCalendar, FiX, FiClock, FiActivity, FiRefreshCw,
-  FiInfo, FiSliders, FiTrendingUp, FiShield, FiHeart, FiSettings,
-  FiBell, FiMessageSquare
+  FiInfo, FiTrendingUp, FiShield, FiHeart, FiSettings,
+  FiBell, FiMessageSquare, FiChevronDown, FiChevronRight, FiArrowRight,
+  FiDownload, FiShare2, FiPrinter, FiAward, FiStar
 } from 'react-icons/fi';
 import axios from 'axios';
 import { useAuth } from '../../contexts/AuthContext'; // Assuming you have an auth context
@@ -20,16 +21,13 @@ class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
-    // Update state so the next render will show the fallback UI
     return { hasError: true };
   }
 
   componentDidCatch(error, info) {
-    // Log the error to an error reporting service
     console.error('Error caught by boundary:', error);
     console.error('Component stack:', info.componentStack);
     
-    // We can use captureOwnerStack in development
     if (process.env.NODE_ENV !== 'production' && React.captureOwnerStack) {
       console.debug('Owner stack:', React.captureOwnerStack());
     }
@@ -37,11 +35,24 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
-      // Render fallback UI
       return this.props.fallback || (
-        <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300">
-          <h3 className="font-medium">Something went wrong</h3>
-          <p className="text-sm mt-1">The notification system encountered an error.</p>
+        <div className="p-6 bg-red-50/80 dark:bg-red-950/30 backdrop-blur-sm border border-red-200 dark:border-red-800/50 rounded-2xl text-red-700 dark:text-red-300 shadow-xl animate-fade-in">
+          <div className="flex items-center mb-4">
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mr-4">
+              <FiAlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">System Error</h3>
+              <p className="text-sm mt-1 text-red-600 dark:text-red-400">We encountered an unexpected issue</p>
+            </div>
+          </div>
+          <p className="mb-4 text-red-600/80 dark:text-red-400/80">The notification system encountered an error. Our team has been notified and is working to resolve this issue.</p>
+          <button 
+            className="px-4 py-2 bg-white dark:bg-red-900/30 border border-red-200 dark:border-red-800/50 rounded-xl text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/50 transition-all duration-200 shadow-sm"
+            onClick={() => window.location.reload()}
+          >
+            Refresh Application
+          </button>
         </div>
       );
     }
@@ -61,6 +72,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
   const [fallbackMode, setFallbackMode] = useState(false);
   const notificationSoundRef = useRef(null);
   const [userInteracted, setUserInteracted] = useState(false);
+  const notificationRef = useRef(null);
   
   // WebSocket refs
   const wsRef = useRef(null);
@@ -77,6 +89,20 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
 
   // Animation controls for bell
   const bellAnimation = useAnimation();
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Track user interaction to enable sound
   useEffect(() => {
@@ -96,9 +122,10 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
     };
   }, []);
 
-  // Play notification sound
+  // Play notification sound with customized volume
   const playNotificationSound = useCallback(() => {
     if (notificationSoundRef.current && userInteracted) {
+      notificationSoundRef.current.volume = 0.4; // Softer volume
       notificationSoundRef.current.currentTime = 0;
       notificationSoundRef.current.play().catch(err => {
         console.log('Error playing sound:', err);
@@ -110,7 +137,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
   const animateBell = useCallback(async () => {
     await bellAnimation.start({
       rotate: [0, 15, -15, 10, -10, 5, -5, 0],
-      transition: { duration: 0.8 }
+      transition: { duration: 0.8, ease: "easeInOut" }
     });
   }, [bellAnimation]);
 
@@ -301,7 +328,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
     // Debug log to see data structure
     console.log('Processing notification data:', JSON.stringify(data, null, 2));
     
-    // For patient assignments, we want to log more details but accept more types of data
+    // For patient assignments, we want additional validation to prevent incomplete patient data
     if (data.event === 'patient_assigned') {
       // For debugging: log details about the patient data
       console.log('Patient data check:', {
@@ -311,44 +338,25 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
         assignmentId: data.assignment_id
       });
       
-      // Accept messages even without patient name if we have an ID
-      // Let's be more lenient about the structure
-      const hasPatientInfo = 
-        (data.data?.patient_id) || 
-        (data.data?.patient?.id) || 
-        (data.assignment_id); // Use assignment ID as fallback
-        
-      if (!hasPatientInfo) {
-        console.log('Notification lacks patient identifier:', data);
-        // Create a simple notification anyway to make sure it shows up
-        const newNotification = {
-          id: data.message_id || `notif-${Date.now()}`,
-          title: 'New Patient Assignment',
-          message: 'A new patient has been assigned to you.',
-          timestamp: data.timestamp || new Date().toISOString(),
-          type: data.event,
-          read: false,
-          data: data.data || {}
-        };
-        
-        // Add notification to state
-        setNotifications(prev => [newNotification, ...prev.slice(0, 19)]);
-        setUnreadCount(prev => prev + 1);
-        
-        // Play sound and animate bell
-        playNotificationSound();
-        animateBell();
-        
-        // Show toast notification
-        toast.info('New patient assigned', {
-          position: "top-right",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        });
-        
+      // Skip notifications with empty data object
+      if (!data.data || Object.keys(data.data).length === 0) {
+        console.log('Skipping notification with empty data object:', data);
+        return;
+      }
+      
+      // Check if patient data has required fields
+      const patientData = data.data.patient || {};
+      const hasValidPatientData = (
+        // Must have a patient_id or patient object with id
+        (data.data.patient_id || (patientData && patientData.id)) &&
+        // Must have at least first name or last name
+        ((patientData.first_name && patientData.first_name.trim()) || 
+         (patientData.last_name && patientData.last_name.trim()) ||
+         (data.data.patient_name && data.data.patient_name.trim()))
+      );
+      
+      if (!hasValidPatientData) {
+        console.log('Skipping notification with incomplete patient data:', data);
         return;
       }
       
@@ -392,9 +400,9 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
       const patientData = data.data.patient || {};
       
       // Extract patient ID from possible locations
-      const patientId = data.data.patient_id || patientData.id || data.assignment_id;
+      const patientId = data.data.patient_id || patientData.id;
       
-      // Extract name if available
+      // Extract name if available from different possible structures
       let firstName = '';
       let lastName = '';
       
@@ -405,6 +413,16 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
       } else if (patientData.first_name || patientData.last_name) {
         firstName = patientData.first_name || '';
         lastName = patientData.last_name || '';
+      } else if (data.data.patient_name) {
+        const nameParts = data.data.patient_name.split(' ');
+        firstName = nameParts[0];
+        lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+      }
+      
+      // Validate first/last name - must have at least one
+      if (!firstName && !lastName) {
+        console.log('Skipping patient with no name information:', data);
+        return;
       }
       
       // Create a patient object with available info
@@ -412,11 +430,12 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
         id: patientId,
         first_name: firstName,
         last_name: lastName,
-        registration_number: patientData.registration_number,
+        registration_number: patientData.registration_number || data.data.patient_registration,
         date_of_birth: patientData.date_of_birth || 
-                       (patientData.age ? new Date(new Date().setFullYear(new Date().getFullYear() - patientData.age)).toISOString() : null),
+                      (patientData.age ? new Date(new Date().setFullYear(new Date().getFullYear() - patientData.age)).toISOString() : null),
         gender: patientData.gender,
         phone_number: patientData.phone_number,
+        email: patientData.email,
         isNew: true, // Flag as new patient
         assignedTimestamp: data.timestamp
       };
@@ -434,6 +453,9 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true,
+        className: "bg-white dark:bg-slate-800 shadow-xl",
+        bodyClassName: "text-slate-700 dark:text-slate-200",
+        progressClassName: "bg-teal-500 dark:bg-teal-400"
       });
     } else if (data.event !== 'connection_established') {
       // Show regular toast notification for non-patient notifications
@@ -445,6 +467,9 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true,
+        className: "bg-white dark:bg-slate-800 shadow-xl",
+        bodyClassName: "text-slate-700 dark:text-slate-200",
+        progressClassName: "bg-blue-500 dark:bg-blue-400"
       });
     }
   }, [animateBell, notifications, onNewPatientAssigned, playNotificationSound]);
@@ -525,19 +550,19 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
       </audio>
       
       {/* Notification bell button */}
-      <div className="relative">
+      <div ref={notificationRef} className="relative z-50">
         <motion.div
           animate={bellAnimation}
           className="relative"
         >
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2.5 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center shadow-sm border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors duration-200 relative"
+            className="group p-2.5 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center border border-slate-200/70 dark:border-slate-700/70 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all duration-200 relative shadow-sm hover:shadow-md"
             aria-label="Show notifications"
           >
-            <FiBell className="w-5 h-5" />
+            <FiBell className="w-5 h-5 transition-colors duration-200 group-hover:text-blue-500 dark:group-hover:text-blue-400" />
             {unreadCount > 0 && (
-              <span className="absolute top-0.5 right-0.5 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center shadow-md">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-medium rounded-full flex items-center justify-center shadow-lg">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -551,24 +576,24 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-              className="fixed right-0 top-0 mt-20 mr-8 w-80 md:w-96 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="fixed right-0 top-0 mt-20 sm:mt-16 mr-4 sm:mr-8 w-[calc(100vw-2rem)] sm:w-96 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200/70 dark:border-slate-700/70 overflow-hidden backdrop-blur-sm"
               style={{ zIndex: 9999 }}
             >
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
-                <h3 className="font-medium text-slate-800 dark:text-white">Notifications</h3>
+              <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700/50">
+                <h3 className="font-medium text-slate-800 dark:text-white text-base">Notifications</h3>
                 <div className="flex items-center space-x-2">
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
-                      className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors duration-200"
+                      className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors duration-200"
                     >
                       Mark all as read
                     </button>
                   )}
                   <button
                     onClick={() => setShowNotifications(false)}
-                    className="p-1 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
                     aria-label="Close notifications"
                   >
                     <FiX className="w-4 h-4" />
@@ -576,24 +601,27 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                 </div>
               </div>
               
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[min(90vh,32rem)] overflow-y-auto overscroll-contain">
                 {notifications.length > 0 ? (
-                  <div className="py-2">
+                  <div className="py-1">
                     {notifications.map((notification) => (
-                      <div
+                      <motion.div
                         key={notification.id}
-                        className={`p-4 border-b border-slate-100 dark:border-slate-700 last:border-b-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-200 ${
-                          !notification.read ? 'bg-indigo-50/50 dark:bg-indigo-900/10' : ''
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700/40 last:border-b-0 transition-colors duration-200 ${
+                          !notification.read ? 'bg-blue-50/40 dark:bg-blue-900/10' : ''
                         }`}
                       >
                         <div className="flex items-start">
                           <div className="flex-shrink-0 mr-3">
                             {notification.type === 'patient_assigned' ? (
-                              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                              <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shadow-sm">
                                 <FiUser className="w-5 h-5" />
                               </div>
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm">
                                 <FiMessageSquare className="w-5 h-5" />
                               </div>
                             )}
@@ -603,7 +631,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                               <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
                                 {notification.title}
                               </p>
-                              <p className="ml-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              <p className="ml-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap font-medium">
                                 {formatRelativeTime(notification.timestamp)}
                               </p>
                             </div>
@@ -613,9 +641,9 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                             
                             {/* Patient preview if available */}
                             {notification.data?.patient && (
-                              <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600/50 text-xs">
+                              <div className="mt-2 p-2 bg-slate-50 dark:bg-slate-700/40 rounded-xl border border-slate-200/70 dark:border-slate-600/30 text-xs shadow-sm">
                                 <div className="flex items-center">
-                                  <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mr-2">
+                                  <div className="w-6 h-6 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center text-teal-600 dark:text-teal-400 shadow-sm mr-2">
                                     <FiUser className="w-3 h-3" />
                                   </div>
                                   <div>
@@ -633,7 +661,7 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                             {/* Action links */}
                             <div className="mt-2 flex justify-between items-center">
                               {!notification.read && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
                                   New
                                 </span>
                               )}
@@ -650,32 +678,43 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                                       setShowNotifications(false);
                                     }
                                   }}
-                                  className="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
+                                  className="ml-auto text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center group"
                                 >
                                   View Patient
+                                  <FiArrowRight className="ml-1 w-3 h-3 transform group-hover:translate-x-0.5 transition-transform" />
                                 </button>
                               )}
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                 ) : (
-                  <div className="py-10 text-center">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-3">
-                      <FiBell className="w-8 h-8 text-slate-400 dark:text-slate-500" />
-                    </div>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">No notifications yet</p>
+                  <div className="py-16 px-6 text-center">
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                      className="mx-auto"
+                    >
+                      <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 shadow-inner">
+                        <FiBell className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                      </div>
+                      <h4 className="text-base font-medium text-slate-700 dark:text-slate-300 mb-1">No notifications yet</h4>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm">
+                        We'll notify you when there are updates
+                      </p>
+                    </motion.div>
                   </div>
                 )}
               </div>
               
               {/* Connection status */}
-              <div className="p-2 border-t border-slate-200 dark:border-slate-700 text-xs flex justify-between items-center">
+              <div className="p-3 border-t border-slate-100 dark:border-slate-700/50 text-xs flex justify-between items-center bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-sm">
                 <div className="flex items-center">
                   <div className={`w-2 h-2 rounded-full mr-2 ${
-                    connected ? 'bg-green-500' : 'bg-red-500'
+                    connected ? 'bg-emerald-500 dark:bg-emerald-400 animate-pulse' : 'bg-rose-500 dark:bg-rose-400'
                   }`}></div>
                   <span className="text-slate-500 dark:text-slate-400">
                     {fallbackMode 
@@ -694,14 +733,20 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
                       failedAttemptsRef.current = 0;
                       connectWebSocket();
                     }}
-                    className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors duration-200"
+                    className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-200 font-medium text-xs"
                   >
                     Reconnect
                   </button>
                 )}
                 
                 {connecting && (
-                  <span className="text-slate-500 dark:text-slate-400">Connecting...</span>
+                  <div className="flex items-center text-slate-500 dark:text-slate-400">
+                    <svg className="animate-spin -ml-1 mr-2 h-3 w-3 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Connecting...</span>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -714,9 +759,18 @@ const NotificationCenter = ({ doctor_id, onNewPatientAssigned, onViewPatientDeta
   // Wrap component with error boundary
   return (
     <ErrorBoundary fallback={
-      <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
-        <h3 className="font-medium text-red-700 dark:text-red-300">Notification System Error</h3>
-        <p className="text-sm text-red-600 dark:text-red-400 mt-1">Please refresh the page to restore notifications.</p>
+      <div className="p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-sm border border-red-200/70 dark:border-red-800/40 rounded-2xl shadow-lg">
+        <div className="flex items-center">
+          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-500 dark:text-red-400 mr-4">
+            <FiAlertCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-medium text-red-700 dark:text-red-300">Notification System Error</h3>
+            <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+              Please refresh the page to restore notifications
+            </p>
+          </div>
+        </div>
       </div>
     }>
       {notificationContent}
@@ -730,32 +784,55 @@ const RecentPatientCards = ({ patients, onViewPatientDetails, getInitials, getFu
   const recentPatients = patients.slice(0, 3);
   
   return (
-    <div className="mb-4">
-      <h3 className="text-lg font-medium text-slate-800 dark:text-white mb-2">Recently Assigned</h3>
+    <div className="mb-8">
+      <h3 className="text-lg font-medium text-slate-800 dark:text-white mb-4 flex items-center">
+        <span className="w-1 h-6 bg-gradient-to-b from-teal-400 to-blue-500 rounded-full mr-2.5"></span>
+        Recently Assigned
+      </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {recentPatients.map(patient => (
-          <div 
-            key={patient.id} 
-            className="p-4 bg-white dark:bg-slate-700/70 rounded-xl border border-slate-200 dark:border-slate-700 shadow hover:shadow-md transition-shadow cursor-pointer"
+          <motion.div
+            key={patient.id}
+            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+            className="group p-5 bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer relative overflow-hidden"
             onClick={() => onViewPatientDetails(patient.id)}
           >
-            <div className="flex items-start">
-              <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mr-3">
-                {getInitials(patient)}
+            {/* Accent glow */}
+            <div className="absolute inset-0 bg-gradient-to-br from-teal-400/10 via-blue-500/5 to-purple-600/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            
+            <div className="flex items-start relative">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-teal-400 to-blue-500 flex items-center justify-center text-white mr-4 shadow-md group-hover:shadow-lg transition-shadow duration-200">
+                <span className="text-base font-semibold">{getInitials(patient)}</span>
               </div>
               <div>
-                <h4 className="font-medium text-slate-800 dark:text-white">{getFullName(patient)}</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <h4 className="font-medium text-slate-800 dark:text-white text-base group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors duration-200">
+                  {getFullName(patient)}
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {patient.registration_number || 'No Reg #'}
                 </p>
-                {patient.isNew && (
-                  <span className="mt-1 inline-block px-1.5 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-xs rounded">
-                    New
-                  </span>
-                )}
+                <div className="mt-2 flex items-center space-x-2">
+                  {patient.isNew && (
+                    <span className="inline-block px-1.5 py-0.5 bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 text-xs rounded-full font-medium">
+                      New
+                    </span>
+                  )}
+                  {patient.gender && (
+                    <span className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-xs rounded-full">
+                      {patient.gender}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+            
+            {/* View details indicator */}
+            <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="p-1 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400">
+                <FiEye className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </motion.div>
         ))}
       </div>
     </div>
@@ -769,7 +846,6 @@ const PatientManagement = () => {
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [patientsPerPage] = useState(10);
   const [totalPatients, setTotalPatients] = useState(0);
@@ -879,7 +955,7 @@ const PatientManagement = () => {
     
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString();
+      return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'Invalid Date';
@@ -888,9 +964,9 @@ const PatientManagement = () => {
 
   // Handle new patient assignment from notification
   const handleNewPatientAssigned = (patient) => {
-    // Only process patients with a valid id
-    if (!patient || !patient.id) {
-      console.log('Skipping patient without ID:', patient);
+    // Only process patients with a valid id and name information
+    if (!patient || !patient.id || (!patient.first_name && !patient.last_name)) {
+      console.log('Skipping patient with missing required data:', patient);
       return;
     }
 
@@ -919,31 +995,36 @@ const PatientManagement = () => {
 
   // Get recently assigned patients (with isNew flag or assignedTimestamp)
   const recentlyAssignedPatients = useMemo(() => {
-    return allPatients.filter(patient => patient.isNew || patient.assignedTimestamp || patient.created_at);
+    return allPatients.filter(patient => 
+      (patient.isNew || patient.assignedTimestamp || patient.created_at) && 
+      // Only include patients with name information
+      (patient.first_name || patient.last_name)
+    );
   }, [allPatients]);
 
-  // Filter patients based on search term and selected filter - client-side filtering
+  // Filter patients based on search term - client-side filtering
   const filteredPatients = useMemo(() => {
     if (!allPatients.length) return [];
     
+    // If no search term, return all patients
+    if (!searchTerm) return allPatients;
+    
     return allPatients.filter(patient => {
-      // Apply search filter
+      // Skip patients with missing required information
+      if (!patient.id || (!patient.first_name && !patient.last_name)) {
+        return false;
+      }
+      
+      // Apply search filter - even with a single character
       const fullName = getFullName(patient).toLowerCase();
-      const searchMatch = !searchTerm || 
-        fullName.includes(searchTerm.toLowerCase()) || 
-        (patient.email && patient.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (patient.phone_number && patient.phone_number.includes(searchTerm)) ||
-        (patient.registration_number && patient.registration_number.toLowerCase().includes(searchTerm.toLowerCase()));
+      const searchTermLower = searchTerm.toLowerCase();
       
-      // Apply status filter
-      const hasCompleteProfile = Boolean(patient.first_name || patient.last_name || patient.email || patient.phone_number);
-      const statusMatch = selectedFilter === 'all' || 
-        (selectedFilter === 'active' && hasCompleteProfile) || 
-        (selectedFilter === 'inactive' && !hasCompleteProfile);
-      
-      return searchMatch && statusMatch;
+      return fullName.includes(searchTermLower) || 
+             (patient.email && patient.email.toLowerCase().includes(searchTermLower)) ||
+             (patient.phone_number && patient.phone_number.includes(searchTerm)) ||
+             (patient.registration_number && patient.registration_number.toLowerCase().includes(searchTermLower));
     });
-  }, [allPatients, searchTerm, selectedFilter]);
+  }, [allPatients, searchTerm]);
 
   // Calculate paginated patients
   const paginatedPatients = useMemo(() => {
@@ -997,6 +1078,9 @@ const PatientManagement = () => {
         closeOnClick: true,
         pauseOnHover: true,
         draggable: true,
+        className: "bg-white dark:bg-slate-800 shadow-xl",
+        bodyClassName: "text-slate-700 dark:text-slate-200",
+        progressClassName: "bg-emerald-500 dark:bg-emerald-400"
       });
       
       const timer = setTimeout(() => {
@@ -1016,9 +1100,14 @@ const PatientManagement = () => {
       });
       
       if (response.data.patients) {
-        setAllPatients(response.data.patients);
-        setPatients(response.data.patients);
-        setTotalPatients(response.data.patients.length);
+        // Filter out patients with missing required fields
+        const validPatients = response.data.patients.filter(
+          patient => patient.id && (patient.first_name || patient.last_name)
+        );
+        
+        setAllPatients(validPatients);
+        setPatients(validPatients);
+        setTotalPatients(validPatients.length);
       } else {
         setError('Failed to fetch patients');
       }
@@ -1037,6 +1126,12 @@ const PatientManagement = () => {
       const response = await axios.get(`http://localhost:8023/api/patients/${patientId}`);
       
       if (response.data && response.data.id) {
+        // Validate patient data before showing details
+        if (!response.data.first_name && !response.data.last_name) {
+          setDetailsError('Patient has incomplete information. Please ask the patient to update their profile.');
+          return;
+        }
+        
         setSelectedPatient(response.data);
         setShowDetailsModal(true);
         
@@ -1089,15 +1184,48 @@ const PatientManagement = () => {
         params: { doctor_id: user.id }
       });
       
-      if (response.data && response.data.id) {
-        setSelectedRecord(response.data);
+      if (response.data && response.data.success) {
+        // Extract the record data from the response
+        const recordData = response.data.record;
+        
+        // Update state with the retrieved record
+        setSelectedRecord(recordData);
         setShowViewRecordModal(true);
+        
+        // Optional: Track record view in analytics
+        console.log(`Record view tracked: Patient ${patientId}, Record ${recordId}`);
       } else {
-        setRecordsError('Failed to load medical record');
+        // Handle case where API call succeeded but record wasn't found
+        setRecordsError(response.data?.message || 'Failed to load medical record');
+        
+        // Show toast notification for record not found
+        toast.error('Medical record not found or access denied', {
+          position: "top-right",
+          autoClose: 4000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          className: "bg-white dark:bg-slate-800 shadow-xl",
+          bodyClassName: "text-slate-700 dark:text-slate-200",
+          progressClassName: "bg-red-500 dark:bg-red-400"
+        });
       }
     } catch (err) {
       console.error('Error fetching medical record:', err);
-      setRecordsError(`Error loading medical record: ${err.message}`);
+      // Handle API error response or connection error
+      const errorMessage = err.response?.data?.detail || err.message || 'Error loading medical record';
+      setRecordsError(`Error: ${errorMessage}`);
+      
+      // Show toast notification for error
+      toast.error(`Failed to load medical record: ${errorMessage}`, {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true
+      });
     } finally {
       setLoadingRecords(false);
     }
@@ -1172,6 +1300,12 @@ const PatientManagement = () => {
   };
 
   const openAddMedicalRecord = (patient) => {
+    // Validate patient has required information
+    if (!patient || !patient.id || (!patient.first_name && !patient.last_name)) {
+      toast.error('Cannot add medical record for a patient with incomplete information');
+      return;
+    }
+    
     setSelectedPatient(patient);
     setNewRecord({
       diagnosis: '',
@@ -1376,11 +1510,234 @@ const PatientManagement = () => {
       setSubmitting(false);
     }
   };
+
+  // Helper functions for medical record view
+  const handlePrintRecord = (record) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Pop-up blocked. Please allow pop-ups for this site to print records.');
+      return;
+    }
+  
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Medical Record - ${record.id}</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            line-height: 1.5;
+            color: #334155;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+          }
+          .header { 
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0; 
+            padding-bottom: 1rem;
+            margin-bottom: 2rem;
+          }
+          .logo {
+            font-weight: bold;
+            font-size: 1.5rem;
+            color: #0284c7;
+          }
+          h1 { font-size: 1.5rem; margin: 0 0 0.5rem 0; color: #0f172a; }
+          h2 { font-size: 1.25rem; margin: 1.5rem 0 0.5rem 0; color: #0f172a; }
+          .meta { font-size: 0.875rem; color: #64748b; }
+          .section {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid #e2e8f0;
+          }
+          .label { font-weight: 600; margin-bottom: 0.25rem; }
+          .grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+          }
+          .medication {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0;
+          }
+          .medication:before {
+            content: "•";
+            color: #0ea5e9;
+            font-weight: bold;
+            margin-right: 0.5rem;
+          }
+          .vital {
+            padding: 0.5rem;
+            background: white;
+            border-radius: 0.25rem;
+            border: 1px solid #e2e8f0;
+          }
+          .footer {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            text-align: center;
+            color: #94a3b8;
+          }
+          @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo">HealthcareMD</div>
+          <div class="meta">
+            Record ID: ${record.id}<br>
+            Created: ${new Date(record.created_at).toLocaleString()}
+          </div>
+        </div>
+        
+        <h1>${record.diagnosis}</h1>
+        
+        <div class="section">
+          <div class="label">Diagnosis</div>
+          <div>${record.diagnosis}</div>
+        </div>
+        
+        ${record.treatment ? `
+        <div class="section">
+          <div class="label">Treatment</div>
+          <div>${record.treatment}</div>
+        </div>
+        ` : ''}
+        
+        ${record.notes ? `
+        <div class="section">
+          <div class="label">Notes</div>
+          <div>${record.notes}</div>
+        </div>
+        ` : ''}
+        
+        ${record.medications && record.medications.length > 0 ? `
+        <div class="section">
+          <div class="label">Medications</div>
+          ${record.medications.map(med => `<div class="medication">${med}</div>`).join('')}
+        </div>
+        ` : ''}
+        
+        ${record.vital_signs && Object.values(record.vital_signs).some(v => v) ? `
+        <div class="section">
+          <div class="label">Vital Signs</div>
+          <div class="grid">
+            ${record.vital_signs.temperature ? `
+            <div class="vital">
+              <div class="label">Temperature</div>
+              <div>${record.vital_signs.temperature} °C</div>
+            </div>
+            ` : ''}
+            ${record.vital_signs.blood_pressure ? `
+            <div class="vital">
+              <div class="label">Blood Pressure</div>
+              <div>${record.vital_signs.blood_pressure} mmHg</div>
+            </div>
+            ` : ''}
+            ${record.vital_signs.heart_rate ? `
+            <div class="vital">
+              <div class="label">Heart Rate</div>
+              <div>${record.vital_signs.heart_rate} bpm</div>
+            </div>
+            ` : ''}
+            ${record.vital_signs.respiratory_rate ? `
+            <div class="vital">
+              <div class="label">Respiratory Rate</div>
+              <div>${record.vital_signs.respiratory_rate} breaths/min</div>
+            </div>
+            ` : ''}
+            ${record.vital_signs.oxygen_saturation ? `
+            <div class="vital">
+              <div class="label">Oxygen Saturation</div>
+              <div>${record.vital_signs.oxygen_saturation}%</div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+        ` : ''}
+        
+        ${record.follow_up_date ? `
+        <div class="section">
+          <div class="label">Follow-up Date</div>
+          <div>${new Date(record.follow_up_date).toLocaleDateString()}</div>
+        </div>
+        ` : ''}
+        
+        <div class="section">
+          <div class="label">Provider Information</div>
+          <div>${record.doctor_name || 'Unknown Provider'}</div>
+        </div>
+        
+        <div class="footer">
+          This record was printed on ${new Date().toLocaleString()}<br>
+          CONFIDENTIAL MEDICAL RECORD - For authorized use only
+        </div>
+        
+        <button class="no-print" style="position: fixed; top: 20px; right: 20px; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.25rem; cursor: pointer;" onclick="window.print()">Print Record</button>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    
+    // Track print action
+    try {
+      console.log(`Record print initiated: Patient ${record.patient_id}, Record ${record.id}`);
+    } catch (error) {
+      console.error('Analytics error:', error);
+    }
+  };
+  
+  const handleAddToCalendar = (record) => {
+    if (!record.follow_up_date) return;
+  
+    const followUpDate = new Date(record.follow_up_date);
+    const endTime = new Date(followUpDate);
+    endTime.setHours(followUpDate.getHours() + 1);
+  
+    // Format dates for calendar URL
+    const formatDate = (date) => {
+      return date.toISOString().replace(/-|:|\.\d+/g, "");
+    };
+  
+    // Create calendar event data
+    const eventDetails = {
+      start: formatDate(followUpDate),
+      end: formatDate(endTime),
+      title: `Follow-up: ${record.diagnosis}`,
+      details: `Follow-up appointment for: ${record.diagnosis}\n\nTreatment: ${record.treatment || 'N/A'}\n\nNotes: ${record.notes || 'N/A'}`,
+      location: "Healthcare Clinic"
+    };
+  
+    // Generate Google Calendar URL
+    const googleCalendarUrl = 
+      `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(eventDetails.title)}&dates=${eventDetails.start}/${eventDetails.end}&details=${encodeURIComponent(eventDetails.details)}&location=${encodeURIComponent(eventDetails.location)}&sf=true&output=xml`;
+  
+    window.open(googleCalendarUrl, '_blank');
+    
+    toast.success('Opening Google Calendar. Please complete the event details.', {
+      position: "top-right",
+      autoClose: 3000
+    });
+  };
   
   // Animation variants
   const fadeInUp = {
     hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } }
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } }
   };
   
   const staggerContainer = {
@@ -1388,64 +1745,105 @@ const PatientManagement = () => {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.1
+        staggerChildren: 0.1,
+        delayChildren: 0.1,
+        ease: [0.22, 1, 0.36, 1]
       }
     }
+  };
+
+  const tableRowVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+    exit: { opacity: 0, x: -10, transition: { duration: 0.2 } }
   };
   
   // Error UI
   if (error && allPatients.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-blue-50 to-teal-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-teal-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4">
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100 dark:border-slate-700 relative overflow-hidden"
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="max-w-md w-full relative"
         >
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500"></div>
-          <div className="flex items-center text-red-600 dark:text-red-400 mb-6">
-            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mr-4 flex-shrink-0">
-              <FiAlertCircle className="w-6 h-6" />
+          <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 p-8 overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500"></div>
+            <div className="flex items-center text-red-600 dark:text-red-400 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mr-4 flex-shrink-0 shadow-md">
+                <FiAlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Connection Error</h2>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">We couldn't connect to the server</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Connection Error</h2>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">We couldn't connect to the server</p>
-            </div>
+            <p className="text-slate-700 dark:text-slate-300 mb-6 leading-relaxed">{error}</p>
+            <motion.button 
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => fetchAllPatients()}
+              className="w-full py-3.5 px-6 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center font-medium"
+            >
+              <FiRefreshCw className="mr-2" /> Retry Connection
+            </motion.button>
           </div>
-          <p className="text-slate-700 dark:text-slate-300 mb-6">{error}</p>
-          <motion.button 
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => fetchAllPatients()}
-            className="w-full py-3 px-6 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center font-medium"
-          >
-            <FiRefreshCw className="mr-2" /> Retry Connection
-          </motion.button>
         </motion.div>
       </div>
     );
   }
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50/50 via-blue-50/50 to-teal-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 transition-colors duration-300">
-      {/* Add a stylish background pattern */}
-      <div className="absolute inset-0 bg-repeat opacity-5 pointer-events-none dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%236366f1' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")` }}></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-teal-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 transition-colors duration-300">
+      {/* Add a subtle geometric pattern */}
+      <div className="absolute inset-0 bg-repeat opacity-[0.015] pointer-events-none dark:opacity-[0.03]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%235D5CDE' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E")` }}></div>
+
+      {/* Animated network gradient background for high-end look */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 opacity-10 dark:opacity-20">
+          <svg className="absolute w-full h-full" viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#0ea5e9" />
+                <stop offset="100%" stopColor="#2dd4bf" />
+              </linearGradient>
+              <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#a855f7" />
+                <stop offset="100%" stopColor="#3b82f6" />
+              </linearGradient>
+            </defs>
+            <circle cx="400" cy="400" r="200" stroke="url(#blueGradient)" strokeWidth="1.5" fill="none" className="animate-pulse-slow" />
+            <circle cx="400" cy="400" r="300" stroke="url(#purpleGradient)" strokeWidth="1" fill="none" strokeDasharray="50,10" className="animate-spin-slow" />
+            <g className="animate-float">
+              {[...Array(15)].map((_, i) => {
+                const angle = (i / 15) * Math.PI * 2;
+                const x = 400 + Math.cos(angle) * (150 + i * 10);
+                const y = 400 + Math.sin(angle) * (150 + i * 10);
+                return (
+                  <circle key={i} cx={x} cy={y} r="3" fill={i % 2 ? "url(#blueGradient)" : "url(#purpleGradient)"} />
+                );
+              })}
+            </g>
+            <path d="M400,200 C500,300 600,400 400,600 C200,400 300,300 400,200" stroke="url(#blueGradient)" strokeWidth="0.5" fill="none" />
+          </svg>
+        </div>
+      </div>
 
       {/* Toast notifications container */}
       <ToastContainer 
         position="top-right" 
         theme={isDarkMode ? 'dark' : 'light'} 
-        toastClassName="rounded-xl shadow-lg" 
+        toastClassName="rounded-xl shadow-xl" 
       />
       
       {/* Main Content Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24 relative z-10">
         <motion.div 
           initial="hidden"
           animate="visible"
           variants={staggerContainer}
-          className="space-y-8"
+          className="space-y-6"
         >
           {/* Success notification */}
           <AnimatePresence>
@@ -1454,10 +1852,10 @@ const PatientManagement = () => {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="bg-emerald-50 dark:bg-emerald-900/30 p-4 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 flex items-center backdrop-blur-sm"
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="bg-emerald-50/80 dark:bg-emerald-900/20 backdrop-blur-lg p-4 rounded-2xl shadow-xl border border-emerald-200/70 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-300 flex items-center"
               >
-                <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center mr-4 flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-800/50 flex items-center justify-center mr-4 flex-shrink-0 shadow-sm">
                   <FiCheckCircle className="w-5 h-5" />
                 </div>
                 <div>
@@ -1471,32 +1869,26 @@ const PatientManagement = () => {
           {/* Main card with patient list */}
           <motion.div 
             variants={fadeInUp}
-            className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-100/50 dark:border-slate-700/50 transition-all duration-200 overflow-hidden"
+            className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200/50 dark:border-slate-700/50 transition-all duration-200 overflow-hidden"
           >
             {/* Hero section with header and intro */}
             <div className="relative overflow-hidden">
               {/* Animated Gradient Background */}
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-teal-500/10 dark:from-indigo-900/20 dark:via-purple-900/20 dark:to-teal-900/20 animate-gradient-shift"></div>
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-teal-500/5 to-purple-500/5 dark:from-blue-900/10 dark:via-teal-900/10 dark:to-purple-900/10 animate-gradient-shift"></div>
               
-              {/* Network-like Abstract Pattern */}
-              <div className="absolute inset-0 opacity-[0.07] dark:opacity-[0.12] pointer-events-none">
-                <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <pattern id="network-pattern" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
-                      <path d="M0 50 L100 50 M50 0 L50 100 M25 25 L75 75 M75 25 L25 75" stroke="currentColor" strokeWidth="1" fill="none" />
-                    </pattern>
-                  </defs>
-                  <rect x="0" y="0" width="100%" height="100%" fill="url(#network-pattern)" />
-                </svg>
-              </div>
+              {/* Radial Gradient Overlay */}
+              <div className="absolute inset-0 opacity-30 dark:opacity-40 pointer-events-none" 
+                style={{ 
+                  background: 'radial-gradient(circle at 50% 80%, rgba(56, 189, 248, 0.08), transparent 65%), radial-gradient(circle at 10% 30%, rgba(16, 185, 129, 0.05), transparent 40%)' 
+                }}></div>
               
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-8 relative z-10">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 md:p-8 relative z-10">
                 <div className="mb-6 md:mb-0">
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-teal-600 bg-clip-text text-transparent dark:from-indigo-400 dark:via-purple-400 dark:to-teal-400 mb-2">My Patients</h1>
-                  <p className="text-slate-600 dark:text-slate-400 max-w-xl">Manage your patient records, medical history, and treatment plans in one secure platform.</p>
+                  <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-700 via-teal-600 to-purple-700 dark:from-blue-400 dark:via-teal-400 dark:to-purple-400 bg-clip-text text-transparent mb-2">My Patients</h1>
+                  <p className="text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">Comprehensive patient management portal for medical records, treatments, and healthcare coordination.</p>
                 </div>
                 
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-5">
                   {/* Notification center with callbacks */}
                   <NotificationCenter 
                     doctor_id={user?.id} 
@@ -1504,12 +1896,16 @@ const PatientManagement = () => {
                     onViewPatientDetails={handleViewPatientDetails}
                   />
                   
-                  <div className="hidden md:block text-right">
-                    <span className="text-sm text-slate-500 dark:text-slate-400 block">Welcome back,</span>
-                    <span className="text-base font-semibold text-slate-800 dark:text-white">Dr. {user?.name || 'Doctor'}</span>
-                  </div>
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-lg shadow-lg">
-                    {user?.name?.charAt(0) || 'D'}
+                  <div className="hidden md:flex items-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm py-2 px-4 rounded-full shadow-sm border border-slate-200/70 dark:border-slate-700/50">
+                    <div className="mr-3">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-semibold text-base shadow-md">
+                        {user?.name?.charAt(0) || 'D'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block">Welcome back,</span>
+                      <span className="font-semibold text-slate-800 dark:text-white">{user?.name || 'Doctor'}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1517,7 +1913,7 @@ const PatientManagement = () => {
             
             {/* Recent Patients Cards Section */}
             {recentlyAssignedPatients.length > 0 && (
-              <div className="px-6 md:px-8 mb-6">
+              <div className="px-6 md:px-8">
                 <RecentPatientCards 
                   patients={recentlyAssignedPatients} 
                   onViewPatientDetails={handleViewPatientDetails}
@@ -1527,69 +1923,43 @@ const PatientManagement = () => {
               </div>
             )}
             
-            {/* Search & Filters Section */}
+            {/* Search Section */}
             <div className="px-6 md:px-8">
-              <motion.div 
-                className="flex flex-col xl:flex-row items-stretch justify-between mb-6 space-y-4 xl:space-y-0 xl:space-x-4"
-                variants={fadeInUp}
-              >
-                <div className="flex-grow flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-                  <div className="relative flex-grow">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <FiSearch className="text-indigo-400 dark:text-indigo-300" />
-                    </div>
-                    <input 
-                      type="text" 
-                      placeholder="Search by name, email, or phone..." 
-                      className="pl-11 pr-4 py-3.5 w-full border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-700/70 backdrop-blur-sm transition-all duration-200 shadow-sm placeholder-slate-400 dark:placeholder-slate-500 text-base"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+              <motion.div variants={fadeInUp} className="mb-6">
+                <div className="relative flex-grow max-w-3xl mx-auto">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <FiSearch className="text-blue-500 dark:text-blue-400" />
                   </div>
-                  
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <FiFilter className="text-indigo-400 dark:text-indigo-300" />
-                    </div>
-                    <select 
-                      className="pl-11 pr-10 py-3.5 bg-white/80 dark:bg-slate-700/70 backdrop-blur-sm border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent transition-all duration-200 shadow-sm text-base appearance-none"
-                      value={selectedFilter}
-                      onChange={(e) => setSelectedFilter(e.target.value)}
+                  <input 
+                    type="text" 
+                    placeholder="Search patients by name, email, phone, or registration..." 
+                    className="pl-11 pr-4 py-3.5 w-full border border-slate-200/70 dark:border-slate-700/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/70 focus:border-transparent text-slate-800 dark:text-slate-200 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm transition-all duration-200 shadow-sm hover:shadow-md placeholder-slate-400/80 dark:placeholder-slate-500/80 text-base font-normal"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    aria-label="Search patients"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-500 dark:text-slate-500 dark:hover:text-slate-400 transition-colors"
+                      aria-label="Clear search"
                     >
-                      <option value="all">All Patients</option>
-                      <option value="active">Active Patients</option>
-                      <option value="inactive">Incomplete Profiles</option>
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <svg className="h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center space-x-3">
-                  <motion.button 
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="py-3.5 px-5 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-all duration-200 shadow-sm flex items-center backdrop-blur-sm bg-white/80 dark:bg-slate-700/50"
-                  >
-                    <FiSliders className="mr-2 text-indigo-500 dark:text-indigo-400" />
-                    <span>Advanced Filters</span>
-                  </motion.button>
+                      <FiX className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             </div>
             
             {/* Patients Table Section */}
-            <div className="px-6 md:px-8 pb-8">
-              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700 transition-all duration-200 bg-white dark:bg-slate-800 shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-                    <thead className="bg-slate-50 dark:bg-slate-700/50">
+            <div className="px-4 md:px-6 lg:px-8 pb-6">
+              <div className="overflow-hidden rounded-2xl border border-slate-200/70 dark:border-slate-700/50 transition-all duration-200 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm shadow-sm">
+                <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                  <table className="min-w-full divide-y divide-slate-200/70 dark:divide-slate-700/50">
+                    <thead className="bg-slate-50/90 dark:bg-slate-700/30 backdrop-blur-sm">
                       <tr>
                         <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Name
+                          Patient
                         </th>
                         <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                           Age
@@ -1608,7 +1978,7 @@ const PatientManagement = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+                    <tbody className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm divide-y divide-slate-200/70 dark:divide-slate-700/50">
                       {paginatedPatients.length > 0 ? (
                         paginatedPatients.map((patient, idx) => {
                           const fullName = getFullName(patient);
@@ -1617,35 +1987,37 @@ const PatientManagement = () => {
                           return (
                             <motion.tr 
                               key={patient.id} 
-                              className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors duration-150 ${
-                                patient.isNew ? 'bg-indigo-50/30 dark:bg-indigo-900/10' : ''
+                              className={`group hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition-all duration-200 ${
+                                patient.isNew ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''
                               }`}
-                              initial={{ opacity: 0, y: 20 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.3, delay: idx * 0.05 }}
-                              whileHover={{ backgroundColor: 'rgba(99, 102, 241, 0.05)' }}
+                              variants={tableRowVariants}
+                              initial="hidden"
+                              animate="visible"
+                              exit="exit"
+                              transition={{ delay: idx * 0.03, duration: 0.2 }}
+                              whileHover={{ backgroundColor: isDarkMode ? 'rgba(51, 65, 85, 0.3)' : 'rgba(248, 250, 252, 0.8)' }}
                             >
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center">
-                                  <div className="flex-shrink-0 h-10 w-10 relative">
-                                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 animate-pulse-slow"></div>
-                                    <div className="absolute inset-[2px] rounded-full bg-white dark:bg-slate-800 flex items-center justify-center">
-                                      <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">
+                                  <div className="flex-shrink-0 h-11 w-11 relative">
+                                    <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500 to-teal-500 animate-pulse-slow shadow-md"></div>
+                                    <div className="absolute inset-[2px] rounded-xl bg-white dark:bg-slate-800 flex items-center justify-center">
+                                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
                                         {getInitials(patient)}
                                       </span>
                                     </div>
                                   </div>
                                   <div className="ml-4">
                                     <div className="flex items-center">
-                                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{fullName}</div>
+                                      <div className="text-base font-medium text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">{fullName}</div>
                                       {patient.isNew && (
-                                        <span className="ml-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 text-xs rounded font-medium">
+                                        <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 text-xs rounded-full font-medium">
                                           NEW
                                         </span>
                                       )}
                                     </div>
                                     {patient.registration_number && (
-                                      <div className="text-xs text-slate-500 dark:text-slate-400">#{patient.registration_number}</div>
+                                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">#{patient.registration_number}</div>
                                     )}
                                   </div>
                                 </div>
@@ -1662,15 +2034,15 @@ const PatientManagement = () => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div>
-                                  <p className="text-sm text-slate-700 dark:text-slate-300">{patient.phone_number || 'No Phone'}</p>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400">{patient.email || 'No Email'}</p>
+                                  <p className="text-sm text-slate-700 dark:text-slate-300 font-medium">{patient.phone_number || 'No Phone'}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{patient.email || 'No Email'}</p>
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-3 py-1.5 inline-flex text-xs font-medium rounded-full ${
+                                <span className={`px-2.5 py-1 inline-flex text-xs font-medium rounded-full ${
                                   hasCompleteProfile 
-                                    ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 border border-teal-200 dark:border-teal-800/50' 
-                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50'
+                                    ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300 border border-teal-200/70 dark:border-teal-800/30' 
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/30'
                                 }`}>
                                   {hasCompleteProfile ? 'Active' : 'Incomplete'}
                                 </span>
@@ -1678,9 +2050,9 @@ const PatientManagement = () => {
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div className="flex justify-end space-x-1">
                                   <motion.button 
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    className="p-2 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all duration-150" 
+                                    whileHover={{ scale: 1.1, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-150 shadow-sm hover:shadow" 
                                     title="View patient details"
                                     onClick={() => viewPatientDetails(patient.id)}
                                     aria-label="View patient details"
@@ -1688,9 +2060,9 @@ const PatientManagement = () => {
                                     <FiEye className="w-5 h-5" />
                                   </motion.button>
                                   <motion.button 
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    className="p-2 text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 rounded-full hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all duration-150" 
+                                    whileHover={{ scale: 1.1, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="p-2 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 rounded-full hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all duration-150 shadow-sm hover:shadow" 
                                     title="View medical records"
                                     onClick={() => fetchPatientRecords(patient.id)}
                                     aria-label="View medical records"
@@ -1698,9 +2070,9 @@ const PatientManagement = () => {
                                     <FiList className="w-5 h-5" />
                                   </motion.button>
                                   <motion.button 
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    className="p-2 text-teal-600 hover:text-teal-900 dark:text-teal-400 dark:hover:text-teal-300 rounded-full hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all duration-150" 
+                                    whileHover={{ scale: 1.1, y: -2 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    className="p-2 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 rounded-full hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-all duration-150 shadow-sm hover:shadow" 
                                     title="Add medical record"
                                     onClick={() => openAddMedicalRecord(patient)}
                                     aria-label="Add medical record"
@@ -1717,30 +2089,32 @@ const PatientManagement = () => {
                           <td colSpan="6" className="px-6 py-16 text-center">
                             {loading ? (
                               <div className="flex flex-col items-center justify-center">
-                                <div className="w-12 h-12 rounded-full border-t-2 border-b-2 border-indigo-500 animate-spin mb-4"></div>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm">Loading patients...</p>
+                                <svg className="animate-spin h-12 w-12 text-blue-500 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p className="text-slate-500 dark:text-slate-400 text-base">Loading patients...</p>
                               </div>
                             ) : (
                               <div className="flex flex-col items-center">
-                                <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4">
+                                <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 shadow-inner">
                                   <FiUser className="w-10 h-10 text-slate-400 dark:text-slate-500" />
                                 </div>
                                 <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300 mb-2">No patients found</h3>
-                                <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-sm mx-auto text-center">
-                                  Try adjusting your search criteria or filters to find the patients you're looking for.
+                                <p className="text-slate-500 dark:text-slate-400 mb-6 max-w-md mx-auto text-center leading-relaxed">
+                                  {searchTerm ? `No patients match "${searchTerm}". Try a different search term.` : "No patients found. New patient assignments will appear here."}
                                 </p>
-                                <motion.button
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="px-4 py-2 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors duration-150 flex items-center"
-                                  onClick={() => {
-                                    setSearchTerm('');
-                                    setSelectedFilter('all');
-                                  }}
-                                >
-                                  <FiRefreshCw className="mr-2" />
-                                  Reset filters
-                                </motion.button>
+                                {searchTerm && (
+                                  <motion.button
+                                    whileHover={{ scale: 1.03 }}
+                                    whileTap={{ scale: 0.97 }}
+                                    className="px-4 py-2.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-150 flex items-center shadow-sm hover:shadow"
+                                    onClick={() => setSearchTerm('')}
+                                  >
+                                    <FiX className="mr-2" />
+                                    Clear search
+                                  </motion.button>
+                                )}
                               </div>
                             )}
                           </td>
@@ -1751,19 +2125,19 @@ const PatientManagement = () => {
                 </div>
                 
                 {/* Pagination */}
-                <div className="bg-slate-50 dark:bg-slate-700/30 px-6 py-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-700">
+                <div className="bg-slate-50/80 dark:bg-slate-800/90 backdrop-blur-sm px-6 py-4 flex items-center justify-between border-t border-slate-200/70 dark:border-slate-700/50">
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     Showing <span className="font-semibold text-slate-800 dark:text-slate-200">{paginatedPatients.length}</span> of <span className="font-semibold text-slate-800 dark:text-slate-200">{totalPatients}</span> patients
                   </p>
                   {totalPatients > patientsPerPage && (
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1.5">
                       <motion.button 
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         className={`p-2 rounded-lg border ${
                           currentPage === 1 
-                            ? 'border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 cursor-not-allowed' 
-                            : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-indigo-500 dark:hover:text-indigo-400'
+                            ? 'border-slate-200/70 dark:border-slate-700/50 text-slate-400 dark:text-slate-600 cursor-not-allowed' 
+                            : 'border-slate-200/70 dark:border-slate-700/50 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-blue-500 dark:hover:text-blue-400 shadow-sm hover:shadow'
                         }`}
                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                         disabled={currentPage === 1}
@@ -1778,12 +2152,12 @@ const PatientManagement = () => {
                         return (
                           <motion.button 
                             key={`page-${pageNum}`}
-                            whileHover={{ scale: 1.05 }}
+                            whileHover={{ scale: 1.05, y: -1 }}
                             whileTap={{ scale: 0.95 }}
-                            className={`p-2 w-10 h-10 flex items-center justify-center rounded-lg ${
+                            className={`p-2 w-10 h-10 flex items-center justify-center rounded-lg shadow-sm ${
                               currentPage === pageNum 
-                                ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border border-indigo-500' 
-                                : 'border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                ? 'bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white font-medium' 
+                                : 'border border-slate-200/70 dark:border-slate-700/50 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50'
                             }`}
                             onClick={() => setCurrentPage(pageNum)}
                             aria-label={`Page ${pageNum}`}
@@ -1798,8 +2172,8 @@ const PatientManagement = () => {
                         whileTap={{ scale: 0.95 }}
                         className={`p-2 rounded-lg border ${
                           currentPage === Math.ceil(totalPatients / patientsPerPage) 
-                            ? 'border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-600 cursor-not-allowed' 
-                            : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-indigo-500 dark:hover:text-indigo-400'
+                            ? 'border-slate-200/70 dark:border-slate-700/50 text-slate-400 dark:text-slate-600 cursor-not-allowed' 
+                            : 'border-slate-200/70 dark:border-slate-700/50 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 hover:text-blue-500 dark:hover:text-blue-400 shadow-sm hover:shadow'
                         }`}
                         onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(totalPatients / patientsPerPage)))}
                         disabled={currentPage === Math.ceil(totalPatients / patientsPerPage)}
@@ -1819,75 +2193,79 @@ const PatientManagement = () => {
           {/* Patient Details Modal */}
           <AnimatePresence>
             {showDetailsModal && selectedPatient && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 w-full max-w-3xl overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 flex justify-between items-center">
+                  <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-r from-blue-50/90 to-teal-50/90 dark:from-blue-900/20 dark:to-teal-900/20 flex justify-between items-center">
                     <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Patient Details</h2>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => setShowDetailsModal(false)}
-                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm"
+                      aria-label="Close modal"
                     >
                       <FiX className="w-5 h-5" />
-                    </button>
+                    </motion.button>
                   </div>
 
                   {/* Loading state */}
                   {loadingDetails ? (
                     <div className="p-8 flex flex-col items-center justify-center">
-                      <div className="w-14 h-14 border-t-3 border-b-3 border-indigo-500 rounded-full animate-spin mb-4"></div>
-                      <p className="text-slate-600 dark:text-slate-400">Loading patient details...</p>
+                      <svg className="animate-spin h-14 w-14 text-blue-500 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <p className="text-slate-600 dark:text-slate-400 text-lg">Loading patient details...</p>
                     </div>
                   ) : detailsError ? (
-                    <div className="p-6 text-center">
+                    <div className="p-8 text-center">
                       <div className="w-16 h-16 mx-auto flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 rounded-full mb-4">
                         <FiAlertCircle className="w-8 h-8" />
                       </div>
                       <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">Error Loading Details</h3>
-                      <p className="text-slate-600 dark:text-slate-400 mb-4">{detailsError}</p>
-                      <button
+                      <p className="text-slate-600 dark:text-slate-400 mb-6">{detailsError}</p>
+                      <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => setShowDetailsModal(false)}
-                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                        className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shadow-sm"
                       >
                         Close
-                      </button>
+                      </motion.button>
                     </div>
                   ) : (
                     <>
                       {/* Patient info */}
                       <div className="p-6">
-                        <div className="flex flex-col md:flex-row md:items-start mb-6">
+                        <div className="flex flex-col md:flex-row md:items-start mb-8">
                           {/* Patient avatar and basic info */}
-                          <div className="flex items-center md:items-start mb-6 md:mb-0 md:mr-6">
-                            <div className="w-20 h-20 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-semibold shadow-lg relative overflow-hidden">
-                              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 animate-pulse-slow"></div>
-                              <div className="absolute inset-[2px] rounded-full bg-white dark:bg-slate-800 flex items-center justify-center">
-                                <span className="text-2xl font-medium text-indigo-700 dark:text-indigo-300 relative">
-                                  {getInitials(selectedPatient)}
-                                </span>
-                              </div>
+                          <div className="flex items-center md:items-start mb-6 md:mb-0 md:mr-8">
+                            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-xl font-semibold shadow-lg relative overflow-hidden">
+                              <span className="relative z-10">{getInitials(selectedPatient)}</span>
+                              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48cGF0aCBkPSJNMzYgMzR2LTRoLTJ2NGgtNHYyaDR2NGgydi00aDR2LTJoLTR6bTAtMzBWMGgtMnY0aC00djJoNHY0aDJWNmg0VjRoLTR6TTYgMzR2LTRINHY0SDB2Mmg0djRoMnYtNGg0di0ySDZ6TTYgNFYwSDR2NEgwdjJoNHY0aDJWNmg0VjRINnoiLz48L2c+PC9nPjwvc3ZnPg==')] opacity-20 mix-blend-overlay"></div>
                             </div>
-                            <div className="ml-6">
+                            <div className="ml-6 md:ml-0 md:mt-4">
                               <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{getFullName(selectedPatient)}</h3>
-                              <div className="mt-1 flex flex-wrap gap-2">
+                              <div className="mt-2 flex flex-wrap gap-2">
                                 {selectedPatient.gender && (
-                                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded text-xs">
+                                  <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full text-xs font-medium shadow-sm">
                                     {selectedPatient.gender}
                                   </span>
                                 )}
                                 {selectedPatient.date_of_birth && (
-                                  <span className="px-2 py-1 bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 rounded text-xs">
+                                  <span className="px-2.5 py-1 bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 rounded-full text-xs font-medium shadow-sm">
                                     {calculateAge(selectedPatient.date_of_birth)} years
                                   </span>
                                 )}
                                 {selectedPatient.registration_number && (
-                                  <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded text-xs">
+                                  <span className="px-2.5 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded-full text-xs font-medium shadow-sm">
                                     #{selectedPatient.registration_number}
                                   </span>
                                 )}
@@ -1897,47 +2275,76 @@ const PatientManagement = () => {
                         </div>
 
                         {/* Details grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
-                            <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3">Contact Information</h4>
-                            <div className="space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-5 rounded-2xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4 flex items-center">
+                              <FiUser className="mr-2 text-blue-500 dark:text-blue-400" /> Contact Information
+                            </h4>
+                            <div className="space-y-4">
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Email</p>
-                                <p className="text-slate-900 dark:text-white font-medium">{selectedPatient.email || 'Not provided'}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Email</p>
+                                <p className="text-slate-900 dark:text-white font-medium">
+                                  {selectedPatient.email ? (
+                                    <a href={`mailto:${selectedPatient.email}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                      {selectedPatient.email}
+                                    </a>
+                                  ) : 'Not provided'}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Phone</p>
-                                <p className="text-slate-900 dark:text-white font-medium">{selectedPatient.phone_number || 'Not provided'}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Phone</p>
+                                <p className="text-slate-900 dark:text-white font-medium">
+                                  {selectedPatient.phone_number ? (
+                                    <a href={`tel:${selectedPatient.phone_number}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                      {selectedPatient.phone_number}
+                                    </a>
+                                  ) : 'Not provided'}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Address</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Address</p>
                                 <p className="text-slate-900 dark:text-white font-medium">{selectedPatient.address || 'Not provided'}</p>
                               </div>
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Emergency Contact</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Emergency Contact</p>
                                 <p className="text-slate-900 dark:text-white font-medium">
                                   {selectedPatient.emergency_contact_name ? 
-                                    `${selectedPatient.emergency_contact_name} (${selectedPatient.emergency_contact_phone || 'No phone'})` : 
+                                    <span>
+                                      {selectedPatient.emergency_contact_name}
+                                      {selectedPatient.emergency_contact_phone && (
+                                        <span> • <a href={`tel:${selectedPatient.emergency_contact_phone}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                                          {selectedPatient.emergency_contact_phone}
+                                        </a></span>
+                                      )}
+                                    </span> : 
                                     'Not provided'}
                                 </p>
                               </div>
                             </div>
                           </div>
 
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
-                            <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-3">Medical Information</h4>
-                            <div className="space-y-3">
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-5 rounded-2xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-4 flex items-center">
+                              <FiActivity className="mr-2 text-teal-500 dark:text-teal-400" /> Medical Information
+                            </h4>
+                            <div className="space-y-4">
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Blood Group</p>
-                                <p className="text-slate-900 dark:text-white font-medium">{selectedPatient.blood_group || 'Not recorded'}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Blood Group</p>
+                                <p className="text-slate-900 dark:text-white font-medium">
+                                  {selectedPatient.blood_group && (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-red-100/70 dark:bg-red-900/20 text-red-800 dark:text-red-300 border border-red-200/60 dark:border-red-800/30 shadow-sm">
+                                      <FiHeart className="mr-1.5 text-red-500 dark:text-red-400" /> {selectedPatient.blood_group}
+                                    </span>
+                                  ) || 'Not recorded'}
+                                </p>
                               </div>
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Allergies</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Allergies</p>
                                 <div className="text-slate-900 dark:text-white font-medium">
                                   {selectedPatient.allergies && selectedPatient.allergies.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1 mt-1">
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
                                       {selectedPatient.allergies.map((allergy, index) => (
-                                        <span key={index} className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded text-xs">
+                                        <span key={index} className="px-2.5 py-1 bg-red-100/70 dark:bg-red-900/20 text-red-800 dark:text-red-300 rounded-full text-xs border border-red-200/60 dark:border-red-800/30 shadow-sm">
                                           {allergy}
                                         </span>
                                       ))}
@@ -1946,39 +2353,48 @@ const PatientManagement = () => {
                                 </div>
                               </div>
                               <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Registered Since</p>
-                                <p className="text-slate-900 dark:text-white font-medium">{selectedPatient.created_at ? formatDate(selectedPatient.created_at) : 'Not available'}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Registered Since</p>
+                                <p className="text-slate-900 dark:text-white font-medium flex items-center">
+                                  <FiCalendar className="mr-1.5 text-blue-500 dark:text-blue-400" /> 
+                                  {selectedPatient.created_at ? formatDate(selectedPatient.created_at) : 'Not available'}
+                                </p>
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex flex-wrap gap-3 justify-end pt-4 border-t border-slate-200 dark:border-slate-700">
-                          <button
+                        <div className="flex flex-wrap gap-3 justify-end pt-4 border-t border-slate-200/70 dark:border-slate-700/50">
+                          <motion.button
+                            whileHover={{ scale: 1.03, y: -2 }}
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => {
                               setShowDetailsModal(false);
                               fetchPatientRecords(selectedPatient.id);
                             }}
-                            className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors flex items-center"
+                            className="px-4 py-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-200 flex items-center shadow-sm hover:shadow"
                           >
                             <FiList className="mr-2" /> View Medical Records
-                          </button>
-                          <button
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.03, y: -2 }}
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => {
                               setShowDetailsModal(false);
                               openAddMedicalRecord(selectedPatient);
                             }}
-                            className="px-4 py-2 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-lg hover:bg-teal-200 dark:hover:bg-teal-900/50 transition-colors flex items-center"
+                            className="px-4 py-2.5 bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-xl hover:bg-teal-200 dark:hover:bg-teal-900/50 transition-all duration-200 flex items-center shadow-sm hover:shadow"
                           >
                             <FiFileText className="mr-2" /> Add Medical Record
-                          </button>
-                          <button
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => setShowDetailsModal(false)}
-                            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 shadow-sm hover:shadow"
                           >
                             Close
-                          </button>
+                          </motion.button>
                         </div>
                       </div>
                     </>
@@ -1991,143 +2407,180 @@ const PatientManagement = () => {
           {/* Medical Records List Modal */}
           <AnimatePresence>
             {showMedicalRecordsModal && selectedPatient && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 w-full max-w-4xl overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 flex justify-between items-center">
+                  <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-r from-blue-50/90 to-teal-50/90 dark:from-blue-900/20 dark:to-teal-900/20 flex justify-between items-center">
                     <div>
-                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Medical Records</h2>
+                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center">
+                        <FiFileText className="mr-2 text-blue-500 dark:text-blue-400" /> Medical Records
+                      </h2>
                       <p className="text-sm text-slate-600 dark:text-slate-400">{getFullName(selectedPatient)}</p>
                     </div>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => setShowMedicalRecordsModal(false)}
-                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm"
+                      aria-label="Close modal"
                     >
                       <FiX className="w-5 h-5" />
-                    </button>
+                    </motion.button>
                   </div>
 
                   {/* Content */}
                   <div className="p-6">
                     {/* Loading state */}
                     {loadingRecords ? (
-                      <div className="py-10 flex flex-col items-center justify-center">
-                        <div className="w-14 h-14 border-t-3 border-b-3 border-indigo-500 rounded-full animate-spin mb-4"></div>
-                        <p className="text-slate-600 dark:text-slate-400">Loading medical records...</p>
+                      <div className="py-16 flex flex-col items-center justify-center">
+                        <svg className="animate-spin h-14 w-14 text-blue-500 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-slate-600 dark:text-slate-400 text-lg">Loading medical records...</p>
                       </div>
                     ) : recordsError ? (
-                      <div className="py-8 text-center">
-                        <div className="w-16 h-16 mx-auto flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 rounded-full mb-4">
+                      <div className="py-16 text-center">
+                        <div className="w-16 h-16 mx-auto flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 rounded-full mb-4 shadow-md">
                           <FiAlertCircle className="w-8 h-8" />
                         </div>
-                        <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">Error Loading Records</h3>
-                        <p className="text-slate-600 dark:text-slate-400 mb-4">{recordsError}</p>
-                        <button
+                        <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">Error Loading Records</h3>
+                        <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">{recordsError}</p>
+                        <motion.button
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
                           onClick={() => setShowMedicalRecordsModal(false)}
-                          className="px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-lg text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                          className="px-4 py-2.5 bg-slate-200 dark:bg-slate-700 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors shadow-sm"
                         >
                           Close
-                        </button>
+                        </motion.button>
                       </div>
                     ) : (
                       <>
                         {/* No records state */}
                         {patientRecords.length === 0 ? (
-                          <div className="py-10 text-center">
-                            <div className="w-16 h-16 mx-auto flex items-center justify-center bg-amber-100 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 rounded-full mb-4">
-                              <FiFileText className="w-8 h-8" />
-                            </div>
-                            <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No Medical Records</h3>
-                            <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md mx-auto">
-                              This patient doesn't have any medical records yet. You can create the first record.
-                            </p>
-                            <div className="flex justify-center">
-                              <button
-                                onClick={() => {
-                                  setShowMedicalRecordsModal(false);
-                                  openAddMedicalRecord(selectedPatient);
-                                }}
-                                className="px-4 py-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-lg transition-colors shadow-sm flex items-center"
-                              >
-                                <FiPlus className="mr-2" /> Add Medical Record
-                              </button>
-                            </div>
+                          <div className="py-16 text-center">
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.5 }}
+                            >
+                              <div className="w-20 h-20 mx-auto flex items-center justify-center bg-amber-100 dark:bg-amber-900/30 text-amber-500 dark:text-amber-400 rounded-full mb-4 shadow-md">
+                                <FiFileText className="w-10 h-10" />
+                              </div>
+                              <h3 className="text-xl font-medium text-slate-900 dark:text-white mb-2">No Medical Records</h3>
+                              <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-md mx-auto leading-relaxed">
+                                This patient doesn't have any medical records yet. You can create the first record.
+                              </p>
+                              <div className="flex justify-center">
+                                <motion.button
+                                  whileHover={{ scale: 1.05, y: -2 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => {
+                                    setShowMedicalRecordsModal(false);
+                                    openAddMedicalRecord(selectedPatient);
+                                  }}
+                                  className="px-5 py-3 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl flex items-center font-medium"
+                                >
+                                  <FiPlus className="mr-2" /> Add Medical Record
+                                </motion.button>
+                              </div>
+                            </motion.div>
                           </div>
                         ) : (
                           <>
                             {/* Records list */}
                             <div className="mb-6 flex justify-between items-center">
-                              <h3 className="text-lg font-medium text-slate-800 dark:text-white">
-                                {patientRecords.length} Record{patientRecords.length !== 1 && 's'}
+                              <h3 className="text-lg font-medium text-slate-800 dark:text-white flex items-center">
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300 text-xs font-semibold mr-2">
+                                  {patientRecords.length}
+                                </span>
+                                {patientRecords.length === 1 ? 'Record' : 'Records'}
                               </h3>
-                              <button
+                              <motion.button
+                                whileHover={{ scale: 1.05, y: -2 }}
+                                whileTap={{ scale: 0.95 }}
                                 onClick={() => {
                                   setShowMedicalRecordsModal(false);
                                   openAddMedicalRecord(selectedPatient);
                                 }}
-                                className="px-3 py-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors flex items-center text-sm"
+                                className="px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-200 flex items-center text-sm shadow-sm hover:shadow"
                               >
-                                <FiPlus className="mr-1" /> Add Record
-                              </button>
+                                <FiPlus className="mr-1.5" /> Add Record
+                              </motion.button>
                             </div>
                             
-                            <div className="space-y-4 overflow-y-auto max-h-96">
-                              {patientRecords.map((record) => (
-                                <div
+                            <div className="space-y-4 overflow-y-auto max-h-[28rem] pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                              {patientRecords.map((record, index) => (
+                                <motion.div
                                   key={record.id}
-                                  className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 hover:shadow-md transition-shadow"
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                                  className="group p-5 bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm rounded-2xl border border-slate-200/70 dark:border-slate-700/50 hover:shadow-md transition-all duration-200 relative overflow-hidden"
                                 >
-                                  <div className="flex justify-between items-start mb-2">
+                                  {/* Hover effect gradient */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-teal-500/5 dark:from-blue-500/10 dark:to-teal-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                  
+                                  <div className="flex justify-between items-start mb-3 relative">
                                     <div>
-                                      <h4 className="font-medium text-slate-900 dark:text-white">{record.diagnosis}</h4>
-                                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                                        {new Date(record.created_at).toLocaleDateString()}
+                                      <h4 className="font-medium text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-200">{record.diagnosis}</h4>
+                                      <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center mt-1">
+                                        <FiCalendar className="w-3.5 h-3.5 mr-1 text-blue-500/70 dark:text-blue-400/70" />
+                                        {formatDate(record.created_at)}
                                       </p>
                                     </div>
                                     <div className="flex space-x-2">
-                                      <button
+                                      <motion.button
+                                        whileHover={{ scale: 1.1, y: -2 }}
+                                        whileTap={{ scale: 0.9 }}
                                         onClick={() => viewMedicalRecord(selectedPatient.id, record.id)}
-                                        className="p-1.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors"
+                                        className="p-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors shadow-sm"
                                         title="View record details"
+                                        aria-label="View record details"
                                       >
                                         <FiEye className="w-4 h-4" />
-                                      </button>
-                                      <button
+                                      </motion.button>
+                                      <motion.button
+                                        whileHover={{ scale: 1.1, y: -2 }}
+                                        whileTap={{ scale: 0.9 }}
                                         onClick={() => openEditRecord(record)}
-                                        className="p-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                                        className="p-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors shadow-sm"
                                         title="Edit record"
+                                        aria-label="Edit record"
                                       >
                                         <FiEdit className="w-4 h-4" />
-                                      </button>
+                                      </motion.button>
                                     </div>
                                   </div>
-                                  <div className="mt-2">
+                                  <div className="mt-2 relative">
                                     {record.treatment && (
-                                      <p className="text-sm text-slate-700 dark:text-slate-300 mb-1">
-                                        <span className="font-medium">Treatment:</span> {record.treatment.substring(0, 100)}
-                                        {record.treatment.length > 100 && '...'}
+                                      <p className="text-sm text-slate-700 dark:text-slate-300 mb-2 line-clamp-2">
+                                        <span className="font-medium text-slate-900 dark:text-slate-100">Treatment:</span> {record.treatment}
                                       </p>
                                     )}
                                     {record.medications && record.medications.length > 0 && (
-                                      <div className="mt-2">
-                                        <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Medications:</span>
-                                        <div className="flex flex-wrap gap-1">
+                                      <div className="mt-3">
+                                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase flex items-center">
+                                          <FiActivity className="w-3.5 h-3.5 mr-1 text-teal-500/70 dark:text-teal-400/70" /> Medications
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
                                           {record.medications.slice(0, 3).map((med, idx) => (
                                             <span
                                               key={idx}
-                                              className="px-2 py-0.5 bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 rounded-full text-xs"
+                                              className="px-2.5 py-1 bg-teal-100/70 dark:bg-teal-900/20 text-teal-800 dark:text-teal-300 rounded-full text-xs font-medium shadow-sm"
                                             >
                                               {med}
                                             </span>
                                           ))}
                                           {record.medications.length > 3 && (
-                                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-full text-xs">
+                                            <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-600/50 text-slate-700 dark:text-slate-300 rounded-full text-xs font-medium shadow-sm">
                                               +{record.medications.length - 3} more
                                             </span>
                                           )}
@@ -2135,20 +2588,22 @@ const PatientManagement = () => {
                                       </div>
                                     )}
                                   </div>
-                                </div>
+                                </motion.div>
                               ))}
                             </div>
                           </>
                         )}
                         
                         {/* Footer */}
-                        <div className="flex justify-end mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                          <button
+                        <div className="flex justify-end mt-6 pt-4 border-t border-slate-200/70 dark:border-slate-700/50">
+                          <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
                             onClick={() => setShowMedicalRecordsModal(false)}
-                            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 shadow-sm hover:shadow"
                           >
                             Close
-                          </button>
+                          </motion.button>
                         </div>
                       </>
                     )}
@@ -2161,165 +2616,301 @@ const PatientManagement = () => {
           {/* View Medical Record Modal */}
           <AnimatePresence>
             {showViewRecordModal && selectedRecord && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 w-full max-w-3xl overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 flex justify-between items-center">
-                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Medical Record</h2>
-                    <button
-                      onClick={() => setShowViewRecordModal(false)}
-                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <FiX className="w-5 h-5" />
-                    </button>
+                  <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-r from-blue-50/90 to-teal-50/90 dark:from-blue-900/20 dark:to-teal-900/20 flex justify-between items-center">
+                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center">
+                      <FiFileText className="mr-2 text-blue-500 dark:text-blue-400" /> Medical Record
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handlePrintRecord(selectedRecord)}
+                        className="p-1.5 rounded-full bg-blue-100/80 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/40 transition-colors shadow-sm"
+                        title="Print record"
+                        aria-label="Print record"
+                      >
+                        <FiPrinter className="w-4 h-4" />
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.1, rotate: 90 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setShowViewRecordModal(false)}
+                        className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm"
+                        aria-label="Close modal"
+                      >
+                        <FiX className="w-5 h-5" />
+                      </motion.button>
+                    </div>
                   </div>
 
                   {/* Content */}
-                  <div className="p-6">
+                  <div className="p-6 overflow-y-auto max-h-[calc(100vh-12rem)] scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                    {/* Record ID and Created info */}
+                    <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between">
+                      <div>
+                        <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">{selectedRecord.diagnosis}</h3>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                          <span className="flex items-center">
+                            <FiCalendar className="w-3.5 h-3.5 mr-1.5 text-blue-500/70 dark:text-blue-400/70" /> 
+                            {formatDate(selectedRecord.created_at)}
+                          </span>
+                          <span className="flex items-center">
+                            <FiClock className="w-3.5 h-3.5 mr-1.5 text-blue-500/70 dark:text-blue-400/70" />
+                            {new Date(selectedRecord.created_at).toLocaleTimeString()}
+                          </span>
+                          <span className="flex items-center">
+                            <FiInfo className="w-3.5 h-3.5 mr-1.5 text-blue-500/70 dark:text-blue-400/70" />
+                            ID: {selectedRecord.id.substring(0,8)}...
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3 sm:mt-0">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          selectedRecord.is_active 
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                        }`}>
+                          {selectedRecord.is_active ? 'Active' : 'Archived'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Diagnosis & Treatment */}
+                    <div className="space-y-5 mb-8">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                          <span className="w-1 h-4 bg-blue-500 dark:bg-blue-400 rounded-full mr-2"></span>
+                          Diagnosis
+                        </h4>
+                        <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl text-slate-800 dark:text-slate-200 whitespace-pre-wrap border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                          {selectedRecord.diagnosis}
+                        </div>
+                      </div>
+                      
+                      {selectedRecord.treatment && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                            <span className="w-1 h-4 bg-teal-500 dark:bg-teal-400 rounded-full mr-2"></span>
+                            Treatment
+                          </h4>
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl text-slate-800 dark:text-slate-200 whitespace-pre-wrap border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            {selectedRecord.treatment}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {selectedRecord.notes && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                            <span className="w-1 h-4 bg-purple-500 dark:bg-purple-400 rounded-full mr-2"></span>
+                            Notes
+                          </h4>
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl text-slate-800 dark:text-slate-200 whitespace-pre-wrap border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            {selectedRecord.notes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Medications */}
+                    {selectedRecord.medications && selectedRecord.medications.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                          <FiActivity className="mr-2 text-teal-500 dark:text-teal-400" /> Medications
+                        </h4>
+                        <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {selectedRecord.medications.map((med, idx) => (
+                              <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.2, delay: idx * 0.05 }}
+                                className="flex items-center text-slate-800 dark:text-slate-200 px-3 py-2 bg-white/60 dark:bg-slate-800/40 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                              >
+                                <span className="w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 mr-3 flex-shrink-0"></span>
+                                <span className="font-medium">{med}</span>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Vital Signs */}
+                    {selectedRecord.vital_signs && Object.values(selectedRecord.vital_signs).some(v => v) && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                          <FiActivity className="mr-2 text-purple-500 dark:text-purple-400" /> Vital Signs
+                        </h4>
+                        <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl grid grid-cols-2 md:grid-cols-3 gap-4 border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                          {selectedRecord.vital_signs.temperature && (
+                            <div className="bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-200/50 dark:border-slate-700/30">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Temperature</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5"></span>
+                                {selectedRecord.vital_signs.temperature} °C
+                              </p>
+                            </div>
+                          )}
+                          {selectedRecord.vital_signs.blood_pressure && (
+                            <div className="bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-200/50 dark:border-slate-700/30">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Blood Pressure</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mr-1.5"></span>
+                                {selectedRecord.vital_signs.blood_pressure} mmHg
+                              </p>
+                            </div>
+                          )}
+                          {selectedRecord.vital_signs.heart_rate && (
+                            <div className="bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-200/50 dark:border-slate-700/30">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Heart Rate</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 mr-1.5"></span>
+                                {selectedRecord.vital_signs.heart_rate} bpm
+                              </p>
+                            </div>
+                          )}
+                          {selectedRecord.vital_signs.respiratory_rate && (
+                            <div className="bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-200/50 dark:border-slate-700/30">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Respiratory Rate</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 mr-1.5"></span>
+                                {selectedRecord.vital_signs.respiratory_rate} breaths/min
+                              </p>
+                            </div>
+                          )}
+                          {selectedRecord.vital_signs.oxygen_saturation && (
+                            <div className="bg-white/80 dark:bg-slate-800/50 backdrop-blur-sm p-3 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-slate-200/50 dark:border-slate-700/30">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Oxygen Saturation</p>
+                              <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                                {selectedRecord.vital_signs.oxygen_saturation}%
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Follow Up Date */}
+                    {selectedRecord.follow_up_date && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                          <FiCalendar className="mr-2 text-blue-500 dark:text-blue-400" /> Follow-up Date
+                        </h4>
+                        <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="px-3 py-2 bg-blue-100/80 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-lg flex items-center shadow-sm">
+                              <FiCalendar className="mr-2 text-blue-500 dark:text-blue-400" />
+                              {formatDate(selectedRecord.follow_up_date)}
+                            </div>
+                            
+                            {/* Days remaining calculation */}
+                            {(() => {
+                              const today = new Date();
+                              const followUpDate = new Date(selectedRecord.follow_up_date);
+                              const diffTime = followUpDate.getTime() - today.getTime();
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              
+                              let statusClass = "";
+                              let statusText = "";
+                              
+                              if (diffDays < 0) {
+                                statusClass = "bg-red-100/80 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+                                statusText = `${Math.abs(diffDays)} days overdue`;
+                              } else if (diffDays === 0) {
+                                statusClass = "bg-amber-100/80 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300";
+                                statusText = "Today";
+                              } else if (diffDays <= 3) {
+                                statusClass = "bg-amber-100/80 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300";
+                                statusText = `In ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+                              } else {
+                                statusClass = "bg-emerald-100/80 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300";
+                                statusText = `In ${diffDays} days`;
+                              }
+                              
+                              return (
+                                <div className={`px-3 py-2 rounded-lg shadow-sm flex items-center ${statusClass}`}>
+                                  <FiClock className="mr-2" />
+                                  {statusText}
+                                </div>
+                              );
+                            })()}
+                            
+                            {/* Add to calendar button */}
+                            <motion.button
+                              whileHover={{ scale: 1.03 }}
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => handleAddToCalendar(selectedRecord)}
+                              className="ml-auto px-3 py-2 bg-white/80 dark:bg-slate-800/50 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 shadow-sm hover:shadow border border-slate-200/50 dark:border-slate-700/30 transition-all duration-150 flex items-center text-sm"
+                            >
+                              <FiCalendar className="mr-1.5 text-blue-500/70 dark:text-blue-400/70" />
+                              Add to Calendar
+                            </motion.button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Doctor & Created By Info */}
                     <div className="mb-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">{selectedRecord.diagnosis}</h3>
-                          <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center">
-                            <FiCalendar className="w-4 h-4 mr-1" /> 
-                            {new Date(selectedRecord.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Diagnosis & Treatment */}
-                      <div className="space-y-4 mb-6">
-                        <div>
-                          <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Diagnosis</h4>
-                          <p className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-                            {selectedRecord.diagnosis}
-                          </p>
-                        </div>
-                        
-                        {selectedRecord.treatment && (
+                      <h4 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase mb-2 flex items-center">
+                        <FiUser className="mr-2 text-blue-500 dark:text-blue-400" /> Record Info
+                      </h4>
+                      <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
-                            <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Treatment</h4>
-                            <p className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-                              {selectedRecord.treatment}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Created By</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200 flex items-center">
+                              <span className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-xs mr-2">
+                                {selectedRecord.doctor_name?.charAt(0) || 'D'}
+                              </span>
+                              {selectedRecord.doctor_name || 'Unknown Doctor'}
                             </p>
                           </div>
-                        )}
-                        
-                        {selectedRecord.notes && (
+                          
                           <div>
-                            <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Notes</h4>
-                            <p className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-                              {selectedRecord.notes}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Last Updated</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200">
+                              {selectedRecord.updated_at ? formatDate(selectedRecord.updated_at) : 'N/A'}
                             </p>
                           </div>
-                        )}
+                        </div>
                       </div>
-
-                      {/* Medications */}
-                      {selectedRecord.medications && selectedRecord.medications.length > 0 && (
-                        <div className="mb-6">
-                          <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Medications</h4>
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
-                            <ul className="space-y-1">
-                              {selectedRecord.medications.map((med, idx) => (
-                                <li 
-                                  key={idx}
-                                  className="flex items-center text-slate-800 dark:text-slate-200"
-                                >
-                                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 mr-2 flex-shrink-0"></span>
-                                  {med}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Vital Signs */}
-                      {selectedRecord.vital_signs && Object.values(selectedRecord.vital_signs).some(v => v) && (
-                        <div className="mb-6">
-                          <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Vital Signs</h4>
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg grid grid-cols-2 gap-4">
-                            {selectedRecord.vital_signs.temperature && (
-                              <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Temperature</p>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">
-                                  {selectedRecord.vital_signs.temperature} °C
-                                </p>
-                              </div>
-                            )}
-                            {selectedRecord.vital_signs.blood_pressure && (
-                              <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Blood Pressure</p>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">
-                                  {selectedRecord.vital_signs.blood_pressure} mmHg
-                                </p>
-                              </div>
-                            )}
-                            {selectedRecord.vital_signs.heart_rate && (
-                              <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Heart Rate</p>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">
-                                  {selectedRecord.vital_signs.heart_rate} bpm
-                                </p>
-                              </div>
-                            )}
-                            {selectedRecord.vital_signs.respiratory_rate && (
-                              <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Respiratory Rate</p>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">
-                                  {selectedRecord.vital_signs.respiratory_rate} breaths/min
-                                </p>
-                              </div>
-                            )}
-                            {selectedRecord.vital_signs.oxygen_saturation && (
-                              <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">Oxygen Saturation</p>
-                                <p className="font-medium text-slate-800 dark:text-slate-200">
-                                  {selectedRecord.vital_signs.oxygen_saturation}%
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Follow Up Date */}
-                      {selectedRecord.follow_up_date && (
-                        <div>
-                          <h4 className="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase mb-2">Follow-up Date</h4>
-                          <p className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-slate-800 dark:text-slate-200 flex items-center">
-                            <FiCalendar className="mr-2 text-indigo-500 dark:text-indigo-400" />
-                            {new Date(selectedRecord.follow_up_date).toLocaleDateString()}
-                          </p>
-                        </div>
-                      )}
                     </div>
+                  </div>
 
-                    {/* Actions */}
-                    <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 dark:border-slate-700">
-                      <button
-                        onClick={() => {
-                          setShowViewRecordModal(false);
-                          openEditRecord(selectedRecord);
-                        }}
-                        className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors flex items-center"
-                      >
-                        <FiEdit className="mr-2" /> Edit Record
-                      </button>
-                      <button
-                        onClick={() => setShowViewRecordModal(false)}
-                        className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-                      >
-                        Close
-                      </button>
-                    </div>
+                  {/* Actions */}
+                  <div className="px-6 py-4 border-t border-slate-200/70 dark:border-slate-700/50 bg-slate-50/80 dark:bg-slate-800/50 backdrop-blur-sm flex flex-wrap justify-between sm:justify-end gap-3">
+                    <motion.button
+                      whileHover={{ scale: 1.03, y: -2 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => {
+                        setShowViewRecordModal(false);
+                        openEditRecord(selectedRecord);
+                      }}
+                      className="px-4 py-2.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all duration-200 flex items-center shadow-sm hover:shadow"
+                    >
+                      <FiEdit className="mr-2" /> Edit Record
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => setShowViewRecordModal(false)}
+                      className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all duration-200 shadow-sm hover:shadow"
+                    >
+                      Close
+                    </motion.button>
                   </div>
                 </motion.div>
               </div>
@@ -2329,64 +2920,76 @@ const PatientManagement = () => {
           {/* Edit Medical Record Modal */}
           <AnimatePresence>
             {showEditRecordModal && editRecordData && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 w-full max-w-3xl overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 flex justify-between items-center">
-                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Edit Medical Record</h2>
-                    <button
+                  <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-r from-blue-50/90 to-teal-50/90 dark:from-blue-900/20 dark:to-teal-900/20 flex justify-between items-center">
+                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center">
+                      <FiEdit className="mr-2 text-blue-500 dark:text-blue-400" /> Edit Medical Record
+                    </h2>
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => setShowEditRecordModal(false)}
-                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm"
+                      aria-label="Close modal"
                     >
                       <FiX className="w-5 h-5" />
-                    </button>
+                    </motion.button>
                   </div>
 
                   {/* Content */}
-                  <div className="p-6">
+                  <div className="p-6 max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
                     {editRecordError && (
-                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300">
-                        {editRecordError}
-                      </div>
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6 p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-sm border border-red-200/70 dark:border-red-800/30 rounded-xl text-red-700 dark:text-red-300 flex items-start shadow-sm"
+                      >
+                        <FiAlertCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+                        <div>{editRecordError}</div>
+                      </motion.div>
                     )}
 
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                       {/* Diagnosis Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
                           Diagnosis <span className="text-red-500">*</span>
                         </label>
                         <textarea
                           name="diagnosis"
                           value={editRecordData.diagnosis || ''}
                           onChange={handleEditRecordChange}
-                          className={`w-full p-3 border ${
+                          className={`w-full p-3.5 border ${
                             editFormTouched.diagnosis && !editRecordData.diagnosis
-                              ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
-                              : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
-                          } rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent`}
+                              ? 'border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/10'
+                              : 'border-slate-300/70 dark:border-slate-600/50 bg-white/80 dark:bg-slate-700/50'
+                          } rounded-xl backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm`}
                           rows="3"
                           placeholder="Enter patient diagnosis"
                         ></textarea>
                         {editFormTouched.diagnosis && !editRecordData.diagnosis && (
-                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">Diagnosis is required</p>
+                          <p className="mt-1.5 text-sm text-red-600 dark:text-red-400 flex items-center">
+                            <FiAlertCircle className="w-4 h-4 mr-1.5" /> Diagnosis is required
+                          </p>
                         )}
                       </div>
                       
                       {/* Treatment Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Treatment</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Treatment</label>
                         <textarea
                           name="treatment"
                           value={editRecordData.treatment || ''}
                           onChange={handleEditRecordChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                           rows="3"
                           placeholder="Enter treatment details"
                         ></textarea>
@@ -2394,12 +2997,12 @@ const PatientManagement = () => {
                       
                       {/* Notes Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Notes</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Notes</label>
                         <textarea
                           name="notes"
                           value={editRecordData.notes || ''}
                           onChange={handleEditRecordChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                           rows="3"
                           placeholder="Enter additional notes"
                         ></textarea>
@@ -2407,42 +3010,56 @@ const PatientManagement = () => {
                       
                       {/* Medications */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Medications</label>
-                        <div className="flex mb-2">
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiActivity className="mr-2 text-teal-500 dark:text-teal-400" /> Medications
+                        </label>
+                        <div className="flex mb-3">
                           <input
                             type="text"
                             value={medicationInput}
                             onChange={(e) => setMedicationInput(e.target.value)}
-                            className="flex-grow p-3 border border-slate-300 dark:border-slate-600 rounded-l-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                            className="flex-grow p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-l-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                             placeholder="Enter medication"
                           />
-                          <button
+                          <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
                             type="button"
                             onClick={addEditMedication}
-                            className="px-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-r-lg flex items-center"
+                            className="px-4 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-r-xl flex items-center justify-center shadow-sm"
                           >
-                            <FiPlus />
-                          </button>
+                            <FiPlus className="w-5 h-5" />
+                          </motion.button>
                         </div>
                         
                         {/* Medications List */}
                         {editRecordData.medications && editRecordData.medications.length > 0 && (
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
-                            <ul className="space-y-1">
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            <ul className="space-y-2">
                               {editRecordData.medications.map((med, idx) => (
-                                <li key={idx} className="flex justify-between items-center">
+                                <motion.li
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -10 }}
+                                  transition={{ duration: 0.2 }}
+                                  key={idx} 
+                                  className="flex justify-between items-center bg-white/80 dark:bg-slate-800/40 backdrop-blur-sm px-4 py-2 rounded-lg shadow-sm"
+                                >
                                   <span className="text-slate-800 dark:text-slate-200 flex items-center">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 mr-2 flex-shrink-0"></span>
+                                    <span className="w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 mr-3 flex-shrink-0"></span>
                                     {med}
                                   </span>
-                                  <button
+                                  <motion.button
+                                    whileHover={{ scale: 1.1, backgroundColor: isDarkMode ? 'rgba(248, 113, 113, 0.2)' : 'rgba(254, 226, 226, 0.8)' }}
+                                    whileTap={{ scale: 0.9 }}
                                     type="button"
                                     onClick={() => removeEditMedication(idx)}
-                                    className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                    className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    aria-label="Remove medication"
                                   >
                                     <FiMinus className="w-4 h-4" />
-                                  </button>
-                                </li>
+                                  </motion.button>
+                                </motion.li>
                               ))}
                             </ul>
                           </div>
@@ -2451,60 +3068,62 @@ const PatientManagement = () => {
                       
                       {/* Vital Signs */}
                       <div>
-                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Vital Signs</label>
+                        <label className="block mb-3 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiActivity className="mr-2 text-purple-500 dark:text-purple-400" /> Vital Signs
+                        </label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Temperature (°C)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Temperature (°C)</label>
                             <input
                               type="text"
                               name="vital_signs.temperature"
                               value={editRecordData.vital_signs?.temperature || ''}
                               onChange={handleEditRecordChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter temperature"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Blood Pressure (mmHg)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Blood Pressure (mmHg)</label>
                             <input
                               type="text"
                               name="vital_signs.blood_pressure"
                               value={editRecordData.vital_signs?.blood_pressure || ''}
                               onChange={handleEditRecordChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="e.g. 120/80"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Heart Rate (bpm)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Heart Rate (bpm)</label>
                             <input
                               type="text"
                               name="vital_signs.heart_rate"
                               value={editRecordData.vital_signs?.heart_rate || ''}
                               onChange={handleEditRecordChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter heart rate"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Respiratory Rate (breaths/min)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Respiratory Rate (breaths/min)</label>
                             <input
                               type="text"
                               name="vital_signs.respiratory_rate"
                               value={editRecordData.vital_signs?.respiratory_rate || ''}
                               onChange={handleEditRecordChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter respiratory rate"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Oxygen Saturation (%)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Oxygen Saturation (%)</label>
                             <input
                               type="text"
                               name="vital_signs.oxygen_saturation"
                               value={editRecordData.vital_signs?.oxygen_saturation || ''}
                               onChange={handleEditRecordChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter oxygen saturation"
                             />
                           </div>
@@ -2513,30 +3132,34 @@ const PatientManagement = () => {
                       
                       {/* Follow-up Date */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Follow-up Date</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiCalendar className="mr-2 text-blue-500 dark:text-blue-400" /> Follow-up Date
+                        </label>
                         <input
                           type="date"
                           name="follow_up_date"
                           value={editRecordData.follow_up_date || ''}
                           onChange={handleEditRecordChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                         />
                       </div>
                       
                       {/* JSON Data Input for advanced users */}
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
                         <details className="text-sm">
-                          <summary className="cursor-pointer text-indigo-600 dark:text-indigo-400 font-medium">
+                          <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium flex items-center">
+                            <FiShield className="mr-2 opacity-70" />
                             Advanced: Edit as JSON
+                            <FiChevronDown className="ml-1.5 w-4 h-4 opacity-70 group-open:rotate-180 transition-transform" />
                           </summary>
-                          <div className="mt-2">
+                          <div className="mt-3">
                             <textarea
-                              className="w-full h-48 p-3 font-mono text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full h-48 p-4 font-mono text-xs border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Paste JSON data"
                               onChange={(e) => handleJSONDataInput(e, true)}
                               defaultValue={JSON.stringify(editRecordData, null, 2)}
                             ></textarea>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
                               You can paste a JSON object with the fields you want to update. 
                               This is for advanced users only.
                             </p>
@@ -2546,22 +3169,29 @@ const PatientManagement = () => {
                     </div>
 
                     {/* Form Actions */}
-                    <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                      <button
+                    <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
+                      <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => setShowEditRecordModal(false)}
                         disabled={updatingRecord}
-                        className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        className="px-4 py-2.5 border border-slate-300/70 dark:border-slate-600/50 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow"
                       >
                         Cancel
-                      </button>
-                      <button
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.03, y: -2 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={updateMedicalRecord}
                         disabled={updatingRecord}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center"
+                        className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center"
                       >
                         {updatingRecord ? (
                           <>
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                            <svg className="animate-spin h-5 w-5 mr-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
                             Updating...
                           </>
                         ) : (
@@ -2569,7 +3199,7 @@ const PatientManagement = () => {
                             <FiSave className="mr-2" /> Save Changes
                           </>
                         )}
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
                 </motion.div>
@@ -2580,69 +3210,82 @@ const PatientManagement = () => {
           {/* Add Medical Record Modal */}
           <AnimatePresence>
             {showNewRecordModal && selectedPatient && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 w-full max-w-3xl overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/70 dark:border-slate-700/50 w-full max-w-3xl overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/30 dark:to-blue-900/30 flex justify-between items-center">
+                  <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/50 bg-gradient-to-r from-blue-50/90 to-teal-50/90 dark:from-blue-900/20 dark:to-teal-900/20 flex justify-between items-center">
                     <div>
-                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white">Add Medical Record</h2>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Patient: {getFullName(selectedPatient)}
+                      <h2 className="text-xl font-semibold text-slate-800 dark:text-white flex items-center">
+                        <FiFileText className="mr-2 text-teal-500 dark:text-teal-400" /> Add Medical Record
+                      </h2>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center">
+                        <FiUser className="w-3.5 h-3.5 mr-1.5 text-blue-500/70 dark:text-blue-400/70" />
+                        {getFullName(selectedPatient)}
                       </p>
                     </div>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.1, rotate: 90 }}
+                      whileTap={{ scale: 0.9 }}
                       onClick={() => setShowNewRecordModal(false)}
-                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                      className="p-1 rounded-full bg-white/80 dark:bg-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors shadow-sm"
+                      aria-label="Close modal"
                     >
                       <FiX className="w-5 h-5" />
-                    </button>
+                    </motion.button>
                   </div>
 
                   {/* Content */}
-                  <div className="p-6 overflow-y-auto max-h-[80vh]">
+                  <div className="p-6 max-h-[80vh] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
                     {formError && (
-                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300">
-                        {formError}
-                      </div>
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6 p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-sm border border-red-200/70 dark:border-red-800/30 rounded-xl text-red-700 dark:text-red-300 flex items-start shadow-sm"
+                      >
+                        <FiAlertCircle className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" />
+                        <div>{formError}</div>
+                      </motion.div>
                     )}
 
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                       {/* Diagnosis Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">
                           Diagnosis <span className="text-red-500">*</span>
                         </label>
                         <textarea
                           name="diagnosis"
                           value={newRecord.diagnosis}
                           onChange={handleInputChange}
-                          className={`w-full p-3 border ${
+                          className={`w-full p-3.5 border ${
                             formTouched.diagnosis && !newRecord.diagnosis
-                              ? 'border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20'
-                              : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
-                          } rounded-lg focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white`}
+                              ? 'border-red-300 dark:border-red-700 bg-red-50/30 dark:bg-red-900/10'
+                              : 'border-slate-300/70 dark:border-slate-600/50 bg-white/80 dark:bg-slate-700/50'
+                          } rounded-xl backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm`}
                           rows="3"
                           placeholder="Enter patient diagnosis"
                         ></textarea>
                         {formTouched.diagnosis && !newRecord.diagnosis && (
-                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">Diagnosis is required</p>
+                          <p className="mt-1.5 text-sm text-red-600 dark:text-red-400 flex items-center">
+                            <FiAlertCircle className="w-4 h-4 mr-1.5" /> Diagnosis is required
+                          </p>
                         )}
                       </div>
                       
                       {/* Treatment Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Treatment</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Treatment</label>
                         <textarea
                           name="treatment"
                           value={newRecord.treatment}
                           onChange={handleInputChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                           rows="3"
                           placeholder="Enter treatment details"
                         ></textarea>
@@ -2650,12 +3293,12 @@ const PatientManagement = () => {
                       
                       {/* Notes Field */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Notes</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Notes</label>
                         <textarea
                           name="notes"
                           value={newRecord.notes}
                           onChange={handleInputChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                           rows="3"
                           placeholder="Enter additional notes"
                         ></textarea>
@@ -2663,42 +3306,56 @@ const PatientManagement = () => {
                       
                       {/* Medications */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Medications</label>
-                        <div className="flex mb-2">
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiActivity className="mr-2 text-teal-500 dark:text-teal-400" /> Medications
+                        </label>
+                        <div className="flex mb-3">
                           <input
                             type="text"
                             value={medicationInput}
                             onChange={(e) => setMedicationInput(e.target.value)}
-                            className="flex-grow p-3 border border-slate-300 dark:border-slate-600 rounded-l-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                            className="flex-grow p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-l-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                             placeholder="Enter medication"
                           />
-                          <button
+                          <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
                             type="button"
                             onClick={addMedication}
-                            className="px-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-r-lg flex items-center"
+                            className="px-4 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-r-xl flex items-center justify-center shadow-sm"
                           >
-                            <FiPlus />
-                          </button>
+                            <FiPlus className="w-5 h-5" />
+                          </motion.button>
                         </div>
                         
                         {/* Medications List */}
                         {newRecord.medications.length > 0 && (
-                          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
-                            <ul className="space-y-1">
+                          <div className="bg-slate-50/80 dark:bg-slate-700/30 backdrop-blur-sm p-4 rounded-xl border border-slate-200/70 dark:border-slate-700/50 shadow-sm">
+                            <ul className="space-y-2">
                               {newRecord.medications.map((med, idx) => (
-                                <li key={idx} className="flex justify-between items-center">
+                                <motion.li
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: -10 }}
+                                  transition={{ duration: 0.2 }}
+                                  key={idx} 
+                                  className="flex justify-between items-center bg-white/80 dark:bg-slate-800/40 backdrop-blur-sm px-4 py-2 rounded-lg shadow-sm"
+                                >
                                   <span className="text-slate-800 dark:text-slate-200 flex items-center">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 mr-2 flex-shrink-0"></span>
+                                    <span className="w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 mr-3 flex-shrink-0"></span>
                                     {med}
                                   </span>
-                                  <button
+                                  <motion.button
+                                    whileHover={{ scale: 1.1, backgroundColor: isDarkMode ? 'rgba(248, 113, 113, 0.2)' : 'rgba(254, 226, 226, 0.8)' }}
+                                    whileTap={{ scale: 0.9 }}
                                     type="button"
                                     onClick={() => removeMedication(idx)}
-                                    className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                                    className="p-1.5 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    aria-label="Remove medication"
                                   >
                                     <FiMinus className="w-4 h-4" />
-                                  </button>
-                                </li>
+                                  </motion.button>
+                                </motion.li>
                               ))}
                             </ul>
                           </div>
@@ -2707,60 +3364,62 @@ const PatientManagement = () => {
                       
                       {/* Vital Signs */}
                       <div>
-                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300">Vital Signs</label>
+                        <label className="block mb-3 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiActivity className="mr-2 text-purple-500 dark:text-purple-400" /> Vital Signs
+                        </label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Temperature (°C)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Temperature (°C)</label>
                             <input
                               type="text"
                               name="vital_signs.temperature"
                               value={newRecord.vital_signs.temperature}
                               onChange={handleInputChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter temperature"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Blood Pressure (mmHg)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Blood Pressure (mmHg)</label>
                             <input
                               type="text"
                               name="vital_signs.blood_pressure"
                               value={newRecord.vital_signs.blood_pressure}
                               onChange={handleInputChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="e.g. 120/80"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Heart Rate (bpm)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Heart Rate (bpm)</label>
                             <input
                               type="text"
                               name="vital_signs.heart_rate"
                               value={newRecord.vital_signs.heart_rate}
                               onChange={handleInputChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter heart rate"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Respiratory Rate (breaths/min)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Respiratory Rate (breaths/min)</label>
                             <input
                               type="text"
                               name="vital_signs.respiratory_rate"
                               value={newRecord.vital_signs.respiratory_rate}
                               onChange={handleInputChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter respiratory rate"
                             />
                           </div>
                           <div>
-                            <label className="block mb-1 text-sm text-slate-600 dark:text-slate-400">Oxygen Saturation (%)</label>
+                            <label className="block mb-1.5 text-sm text-slate-600 dark:text-slate-400">Oxygen Saturation (%)</label>
                             <input
                               type="text"
                               name="vital_signs.oxygen_saturation"
                               value={newRecord.vital_signs.oxygen_saturation}
                               onChange={handleInputChange}
-                              className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Enter oxygen saturation"
                             />
                           </div>
@@ -2769,30 +3428,34 @@ const PatientManagement = () => {
                       
                       {/* Follow-up Date */}
                       <div>
-                        <label className="block mb-1 font-medium text-slate-700 dark:text-slate-300">Follow-up Date</label>
+                        <label className="block mb-2 font-medium text-slate-700 dark:text-slate-300 flex items-center">
+                          <FiCalendar className="mr-2 text-blue-500 dark:text-blue-400" /> Follow-up Date
+                        </label>
                         <input
                           type="date"
                           name="follow_up_date"
                           value={newRecord.follow_up_date}
                           onChange={handleInputChange}
-                          className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                          className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                         />
                       </div>
                       
                       {/* JSON Data Input for advanced users */}
-                      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <div className="mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
                         <details className="text-sm">
-                          <summary className="cursor-pointer text-indigo-600 dark:text-indigo-400 font-medium">
+                          <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium flex items-center">
+                            <FiShield className="mr-2 opacity-70" />
                             Advanced: Edit as JSON
+                            <FiChevronDown className="ml-1.5 w-4 h-4 opacity-70 group-open:rotate-180 transition-transform" />
                           </summary>
-                          <div className="mt-2">
+                          <div className="mt-3">
                             <textarea
-                              className="w-full h-48 p-3 font-mono text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 focus:border-transparent text-slate-900 dark:text-white"
+                              className="w-full h-48 p-4 font-mono text-xs border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                               placeholder="Paste JSON data"
                               onChange={handleJSONDataInput}
                               defaultValue={JSON.stringify(newRecord, null, 2)}
                             ></textarea>
-                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
                               You can paste a JSON object with medical record data.
                               This is for advanced users only.
                             </p>
@@ -2802,22 +3465,29 @@ const PatientManagement = () => {
                     </div>
                     
                     {/* Form Actions */}
-                    <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-                      <button
+                    <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
+                      <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => setShowNewRecordModal(false)}
                         disabled={submitting}
-                        className="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                        className="px-4 py-2.5 border border-slate-300/70 dark:border-slate-600/50 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all duration-200 disabled:opacity-50 shadow-sm hover:shadow"
                       >
                         Cancel
-                      </button>
-                      <button
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.03, y: -2 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => createMedicalRecord(selectedPatient.id)}
                         disabled={submitting}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center"
+                        className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center"
                       >
                         {submitting ? (
                           <>
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                            <svg className="animate-spin h-5 w-5 mr-3 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
                             Saving...
                           </>
                         ) : (
@@ -2825,7 +3495,7 @@ const PatientManagement = () => {
                             <FiSave className="mr-2" /> Save Record
                           </>
                         )}
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
                 </motion.div>
@@ -2835,7 +3505,7 @@ const PatientManagement = () => {
         </motion.div>
       </div>
       
-      {/* Add custom CSS animations */}
+      {/* Custom CSS animations */}
       <style jsx>{`
         @keyframes gradient-shift {
           0% { background-position: 0% 50%; }
@@ -2844,13 +3514,8 @@ const PatientManagement = () => {
         }
         
         .animate-gradient-shift {
-          background-size: 200% 200%;
+          background-size: 400% 400%;
           animation: gradient-shift 8s ease infinite;
-        }
-        
-        .animate-gradient-slow {
-          background-size: 200% 200%;
-          animation: gradient-shift 6s ease infinite;
         }
         
         .animate-pulse-slow {
@@ -2862,24 +3527,49 @@ const PatientManagement = () => {
           50% { opacity: 0.7; }
         }
         
-        .animation-delay-150 {
-          animation-delay: 150ms;
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out forwards;
         }
         
-        .border-t-3 {
-          border-top-width: 3px;
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
         
-        .border-b-3 {
-          border-bottom-width: 3px;
+        .scrollbar-thin::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
         }
         
-        .border-r-3 {
-          border-right-width: 3px;
+        .scrollbar-thin::-webkit-scrollbar-track {
+          background: transparent;
         }
         
-        .border-l-3 {
-          border-left-width: 3px;
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 9999px;
+        }
+        
+        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+          background: #334155;
+        }
+        
+        .animate-spin-slow {
+          animation: spin 30s linear infinite;
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
         }
       `}</style>
     </div>

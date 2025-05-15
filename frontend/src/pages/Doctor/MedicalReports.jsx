@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   FiSearch,
   FiPlus,
@@ -46,12 +46,19 @@ export default function DoctorMedicalReports() {
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   
-  // Key for forcing re-render when navigating back
-  const [renderKey, setRenderKey] = useState(0);
+  // NEW: View modes enum to control what content is displayed
+  const VIEW_MODES = {
+    PATIENTS_LIST: 'patients_list',
+    PATIENT_REPORTS: 'patient_reports'
+  };
+  
+  // NEW: Current view mode state - more reliable than using viewingPatient as a flag
+  const [currentView, setCurrentView] = useState(VIEW_MODES.PATIENTS_LIST);
   
   // Refs to prevent duplicate API calls and store cached patients
   const isFetchingRef = useRef(false);
   const patientsCacheRef = useRef([]);
+  const initialLoadCompletedRef = useRef(false);
   
   // Pagination state - removed pagination for reports
   const [currentPatientPage, setCurrentPatientPage] = useState(1);
@@ -115,27 +122,41 @@ export default function DoctorMedicalReports() {
 
   // Fetch patients on component load
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && !initialLoadCompletedRef.current) {
+      console.log("Initial patients fetch triggered");
       fetchPatients();
+      initialLoadCompletedRef.current = true;
     }
   }, [user]);
 
-  // Direct data handler to ensure we have patients data
+  // Also fetch patients when view changes back to patients list
+  useEffect(() => {
+    if (currentView === VIEW_MODES.PATIENTS_LIST && patients.length === 0 && !isLoadingPatients) {
+      console.log("Fetching patients because view changed to patients list and no patients loaded");
+      
+      if (patientsCacheRef.current.length > 0) {
+        console.log("Restoring patients from cache after view change");
+        setPatients([...patientsCacheRef.current]);
+      } else {
+        fetchPatients();
+      }
+    }
+  }, [currentView]);
+
+  // Update cache when patients data changes
   useEffect(() => {
     if (patients.length > 0) {
+      console.log("Updating patients cache with current patients data");
       patientsCacheRef.current = [...patients];
-    } else if (patientsCacheRef.current.length > 0 && !isLoadingPatients) {
-      console.log("Restoring patients from cache to state");
-      setPatients([...patientsCacheRef.current]);
     }
-  }, [patients, isLoadingPatients]);
+  }, [patients]);
 
   // Fetch reports when a patient is selected for viewing
   useEffect(() => {
-    if (viewingPatient?.id) {
+    if (viewingPatient?.id && currentView === VIEW_MODES.PATIENT_REPORTS) {
       fetchPatientReports(viewingPatient.id);
     }
-  }, [viewingPatient]);
+  }, [viewingPatient, currentView]);
 
   // Automatically hide success messages after 5 seconds
   useEffect(() => {
@@ -146,9 +167,22 @@ export default function DoctorMedicalReports() {
       return () => clearTimeout(timer);
     }
   }, [successMessage]);
+  
+  // Debug log for view changes
+  useEffect(() => {
+    console.log(`View changed to: ${currentView}, viewingPatient: ${viewingPatient ? 'present' : 'null'}`);
+  }, [currentView, viewingPatient]);
 
   const fetchPatients = async () => {
-    if (!user?.id || isFetchingRef.current) return;
+    if (!user?.id) {
+      console.log("No user ID available, cannot fetch patients");
+      return;
+    }
+
+    if (isFetchingRef.current) {
+      console.log("Already fetching patients, request ignored");
+      return;
+    }
 
     isFetchingRef.current = true;
     setIsLoadingPatients(true);
@@ -157,7 +191,7 @@ export default function DoctorMedicalReports() {
     try {
       console.log("Fetching patients for doctor ID:", user.id);
       
-      // Use a small delay to ensure proper loading state is visible
+      // Small delay for loading state visibility
       await new Promise(resolve => setTimeout(resolve, 300));
       
       const response = await fetch(
@@ -247,38 +281,46 @@ export default function DoctorMedicalReports() {
   };
 
   const handleViewPatientReports = (patient) => {
+    // First set the viewing patient
     setViewingPatient(patient);
+    // Then change the view mode - this order is important
+    setCurrentView(VIEW_MODES.PATIENT_REPORTS);
   };
 
-  const handleBackToPatients = () => {
+  // Improved back navigation function with proper sequencing
+  const handleBackToPatients = useCallback(() => {
     console.log("Navigating back to patients list");
     
-    // First reset states in order
+    // First reset the viewing patient - this needs to happen BEFORE changing views
+    // to prevent useEffect hooks from triggering in the wrong order
+    setViewingPatient(null);
+    
+    // Reset reports array and search
     setReports([]);
     setSearchTerm("");
+    
+    // Reset pagination to first page
     setCurrentPatientPage(1);
     
-    // Force a re-render
-    setRenderKey(prev => prev + 1);
-    
-    // Show loading state for visual feedback
-    setIsLoadingPatients(true);
-    
-    // Restore patients from cache immediately if available
+    // Ensure patients list is populated from cache before changing view
     if (patientsCacheRef.current.length > 0) {
-      console.log("Restoring patients data from cache, count:", patientsCacheRef.current.length);
+      console.log("Pre-applying patients from cache before view change, count:", patientsCacheRef.current.length);
       setPatients([...patientsCacheRef.current]);
+      // Update view without showing loading state
       setIsLoadingPatients(false);
+      setCurrentView(VIEW_MODES.PATIENTS_LIST);
     } else {
-      // Fallback to API call
-      console.log("Cache empty, fetching patients with API");
-      fetchPatients();
+      // If no cache, show loading state and fetch
+      console.log("No cached patients, will fetch after view change");
+      setIsLoadingPatients(true);
+      setCurrentView(VIEW_MODES.PATIENTS_LIST);
+      
+      // Small delay before fetching to ensure view change completes first
+      setTimeout(() => {
+        fetchPatients();
+      }, 50);
     }
-    
-    // Important: Clear the viewingPatient state AFTER other state updates
-    // This ensures the UI transitions back to the patients view properly
-    setViewingPatient(null);
-  };
+  }, []);
 
   const handleManualRefresh = () => {
     if (isFetchingRef.current) return;
@@ -586,24 +628,11 @@ export default function DoctorMedicalReports() {
     return format?.toUpperCase() || "PDF";
   };
 
-  // Debug info at top of page
-  const debugInfo = (
-    <div className="fixed top-0 left-0 z-50 bg-black/80 text-white text-xs p-2 max-w-sm overflow-auto" style={{ maxHeight: '200px' }}>
-      <div>viewingPatient: {viewingPatient ? 'true' : 'false'}</div>
-      <div>patients: {patients.length}</div>
-      <div>cache: {patientsCacheRef.current.length}</div>
-      <div>renderKey: {renderKey}</div>
-      <div>isLoadingPatients: {isLoadingPatients ? 'true' : 'false'}</div>
-      <pre>{filteredPatients.map(p => p.name || p.first_name).join(', ')}</pre>
-    </div>
-  );
+  // Debug log to understand current view state
+  console.log("Current view:", currentView, "Patients count:", patients.length, "Cache size:", patientsCacheRef.current.length);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-900 dark:to-gray-900 transition-colors duration-200 font-['Inter',system-ui,sans-serif]">
-      {/* Uncomment for debugging 
-      {debugInfo} 
-      */}
-      
       {/* Page container with top wave decoration */}
       <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-r from-teal-500/10 via-blue-500/10 to-purple-500/10 dark:from-teal-900/20 dark:via-blue-900/20 dark:to-purple-900/20 overflow-hidden z-0">
         <div className="w-full h-full bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQ0MCIgaGVpZ2h0PSIxNTAiIHZpZXdCb3g9IjAgMCAxNDQwIDE1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMCAwQzQwOC43IDAgNTQwLjcgMTUwIDcyMCAxNTBDOTAyLjUgMTUwIDEwMzIuMyAwIDE0NDAgMFYxNTBIMFYwWiIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')]"></div>
@@ -784,7 +813,7 @@ export default function DoctorMedicalReports() {
       </AnimatePresence>
 
       <div className="container mx-auto px-4 py-6 space-y-6 relative z-10">
-        {viewingPatient ? (
+        {currentView === VIEW_MODES.PATIENT_REPORTS ? (
           /* Patient's Medical Reports View */
           <motion.div
             initial="hidden"
@@ -1002,7 +1031,7 @@ export default function DoctorMedicalReports() {
         ) : (
           /* Patients List View */
           <motion.div
-            key={`patients-list-view-${renderKey}`}
+            key="patients-list-view"
             initial="hidden"
             animate="visible"
             variants={containerVariants}
