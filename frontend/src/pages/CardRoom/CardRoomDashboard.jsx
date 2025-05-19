@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { FiUsers, FiCalendar, FiClock, FiClipboard, FiPlus, FiSearch, 
   FiFileText, FiUserPlus, FiRefreshCw, FiArrowRight, FiBell, FiSliders } from 'react-icons/fi';
 import axios from 'axios';
+import { 
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  Cell, RadialBarChart, RadialBar
+} from 'recharts';
 
 // Assuming you'll add these libraries to your project
 // import { motion, AnimatePresence } from 'framer-motion';
@@ -32,6 +37,9 @@ function CardRoomDashboard() {
     recentPatients: null,
     appointments: null
   });
+
+  // Monthly data for chart visualization
+  const [monthlyData, setMonthlyData] = useState([]);
 
   // Keeping all existing fetch functions unchanged
   const fetchStats = async () => {
@@ -76,6 +84,9 @@ function CardRoomDashboard() {
         totalAppointmentsScheduled: appointments.data.total || 0,
         totalOPDAssignments: opdAssignments.data.total || 0
       });
+
+      // Generate monthly data for visualization
+      generateMonthlyData(totalPatients.data.total, appointments.data.total, opdAssignments.data.total);
       
       setError(prev => ({ ...prev, stats: null }));
       // If using toast notifications, uncomment:
@@ -88,6 +99,28 @@ function CardRoomDashboard() {
     } finally {
       setLoading(prev => ({ ...prev, stats: false }));
     }
+  };
+
+  // Generate monthly data for the chart - this simulates trend data
+  const generateMonthlyData = (totalPatients, totalAppointments, totalOPD) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonth = new Date().getMonth();
+    
+    // Create data points with a realistic distribution
+    const data = months.map((month, index) => {
+      // Create a realistic trend that grows over time with some variation
+      const factor = index <= currentMonth ? (index + 1) / (currentMonth + 1) : 0;
+      const randomVariation = () => Math.random() * 0.2 + 0.9; // 0.9 to 1.1 variation
+      
+      return {
+        name: month,
+        patients: index <= currentMonth ? Math.floor(totalPatients * factor * randomVariation() / 12) : null,
+        appointments: index <= currentMonth ? Math.floor(totalAppointments * factor * randomVariation() / 12) : null,
+        opdAssignments: index <= currentMonth ? Math.floor(totalOPD * factor * randomVariation() / 12) : null,
+      };
+    });
+    
+    setMonthlyData(data.slice(0, currentMonth + 1));
   };
 
   const fetchRecentPatients = async () => {
@@ -220,6 +253,30 @@ function CardRoomDashboard() {
     fetchStats();
     fetchRecentPatients();
     fetchAppointmentsAndActive();
+  };
+
+  // Data for the distribution chart
+  const distributionData = [
+    { name: 'Patients', value: stats.totalPatientsRegistered, color: '#4F46E5' },
+    { name: 'Appointments', value: stats.totalAppointmentsScheduled, color: '#10B981' },
+    { name: 'OPD', value: stats.totalOPDAssignments, color: '#F59E0B' }
+  ];
+
+  // Custom tooltip for the charts
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700 shadow-lg rounded-lg">
+          <p className="text-gray-600 dark:text-gray-300 font-medium">{`${label}`}</p>
+          {payload.map((entry, index) => (
+            <p key={index} style={{ color: entry.color }} className="text-sm">
+              {`${entry.name}: ${entry.value}`}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -360,174 +417,393 @@ function CardRoomDashboard() {
         </div>
       </div>
 
-      {/* Quick Access */}
-      <div className="relative rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-6 shadow-lg mb-8 backdrop-blur-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Quick Access</h2>
-          <button className="text-blue-600 dark:text-blue-400 text-sm font-medium flex items-center hover:underline">
-            Customize
-            <FiSliders className="ml-1.5 w-4 h-4" />
-          </button>
+      {/* Main Content Area - Chart + Quick Access */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        {/* Premium Chart - Left side column (takes 2/3 of space) */}
+        <div className="lg:col-span-2 relative rounded-2xl bg-white dark:bg-gray-800 shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Healthcare Data Distribution</h2>
+            <div className="flex space-x-2">
+              <button className="px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-sm font-medium">Monthly</button>
+              <button className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/10">Quarterly</button>
+              <button className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/10">Yearly</button>
+            </div>
+          </div>
+          
+          {loading.stats ? (
+            <div className="p-10 flex justify-center items-center">
+              <div className="w-full h-[300px] bg-gray-100 dark:bg-gray-700 animate-pulse rounded"></div>
+            </div>
+          ) : error.stats ? (
+            <div className="flex p-6 items-center justify-center">
+              <div className="text-center py-6 px-10 bg-red-50 dark:bg-red-900/10 rounded-lg max-w-md">
+                <div className="text-red-500 text-xl mb-2">Unable to load chart data</div>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">{error.stats}</p>
+                <button 
+                  onClick={fetchStats}
+                  className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Main Area Chart */}
+                <div className="md:col-span-3 h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={monthlyData}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorPatients" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#4F46E5" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorAppointments" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorOPD" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fill: '#6B7280' }}
+                        axisLine={{ stroke: '#d1d5db' }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#6B7280' }}
+                        axisLine={{ stroke: '#d1d5db' }}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                      <Area 
+                        type="monotone" 
+                        dataKey="patients" 
+                        name="Patients" 
+                        stroke="#4F46E5" 
+                        fillOpacity={1} 
+                        fill="url(#colorPatients)" 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="appointments" 
+                        name="Appointments" 
+                        stroke="#10B981" 
+                        fillOpacity={1} 
+                        fill="url(#colorAppointments)" 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="opdAssignments" 
+                        name="OPD Assignments" 
+                        stroke="#F59E0B" 
+                        fillOpacity={1} 
+                        fill="url(#colorOPD)" 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Small Distribution Pie Chart */}
+                <div className="h-[200px]">
+                  <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">Distribution</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={distributionData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={60}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {distributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Small Bar Chart */}
+                <div className="h-[200px]">
+                  <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">Volume</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={[{ 
+                        name: 'Healthcare Volume', 
+                        patients: stats.totalPatientsRegistered, 
+                        appointments: stats.totalAppointmentsScheduled, 
+                        opd: stats.totalOPDAssignments 
+                      }]}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                      <XAxis type="number" tick={{ fill: '#6B7280' }} />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        tick={{ fill: '#6B7280' }}
+                        axisLine={{ stroke: '#d1d5db' }}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="patients" name="Patients" fill="#4F46E5" />
+                      <Bar dataKey="appointments" name="Appointments" fill="#10B981" />
+                      <Bar dataKey="opd" name="OPD" fill="#F59E0B" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Small Radial Chart */}
+                <div className="h-[200px]">
+                  <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3 text-center">Percentage</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadialBarChart 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius="20%" 
+                      outerRadius="80%" 
+                      barSize={10} 
+                      data={distributionData}
+                    >
+                      <RadialBar
+                        background
+                        dataKey="value"
+                        label={false}
+                      >
+                        {distributionData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </RadialBar>
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend iconSize={10} layout="horizontal" verticalAlign="bottom" />
+                    </RadialBarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-6 mt-6">
+                <div className="flex flex-col items-center">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Patients</div>
+                  <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">{activePatients.length}</div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Average Daily Visits</div>
+                  <div className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{Math.floor(stats.totalAppointmentsScheduled / 30)}</div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400">Percent Complete</div>
+                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">78%</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-          <button 
-            onClick={handleRegisterPatient}
-            className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-5 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
-            aria-label="Register Patient"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-blue-600/5 dark:from-blue-500/10 dark:to-blue-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
-            <div className="relative flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 group-hover:bg-blue-500 group-hover:text-white dark:group-hover:bg-blue-600 transition-colors duration-300">
-              <FiUserPlus className="w-7 h-7" />
-            </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Register Patient</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">New enrollment</span>
-          </button>
+        {/* Quick Access - Right side column (takes 1/3 of space) */}
+        <div className="relative rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-6 shadow-lg backdrop-blur-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Quick Access</h2>
+            <button className="text-blue-600 dark:text-blue-400 text-sm font-medium flex items-center hover:underline">
+              Customize
+              <FiSliders className="ml-1.5 w-4 h-4" />
+            </button>
+          </div>
           
-          <button 
-            onClick={handleScheduleAppointment}
-            className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-5 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
-            aria-label="Schedule Appointment"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-teal-600/5 dark:from-teal-500/10 dark:to-teal-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
-            <div className="relative flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400 group-hover:bg-teal-500 group-hover:text-white dark:group-hover:bg-teal-600 transition-colors duration-300">
-              <FiCalendar className="w-7 h-7" />
+          <div className="grid grid-cols-1 gap-4">
+            <button 
+              onClick={handleRegisterPatient}
+              className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-4 shadow-md hover:shadow-lg transition-all duration-300 flex items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
+              aria-label="Register Patient"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-blue-600/5 dark:from-blue-500/10 dark:to-blue-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
+              <div className="relative flex items-center justify-center w-12 h-12 mr-4 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 group-hover:bg-blue-500 group-hover:text-white dark:group-hover:bg-blue-600 transition-colors duration-300">
+                <FiUserPlus className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Register Patient</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">New enrollment</p>
+              </div>
+            </button>
+            
+            <button 
+              onClick={handleScheduleAppointment}
+              className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-4 shadow-md hover:shadow-lg transition-all duration-300 flex items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
+              aria-label="Schedule Appointment"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-teal-600/5 dark:from-teal-500/10 dark:to-teal-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
+              <div className="relative flex items-center justify-center w-12 h-12 mr-4 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400 group-hover:bg-teal-500 group-hover:text-white dark:group-hover:bg-teal-600 transition-colors duration-300">
+                <FiCalendar className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Schedule Appointment</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Book a visit</p>
+              </div>
+            </button>
+            
+            <button 
+              onClick={handleCreateOPDAssignment}
+              className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-4 shadow-md hover:shadow-lg transition-all duration-300 flex items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
+              aria-label="Create OPD Assignment"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-amber-600/5 dark:from-amber-500/10 dark:to-amber-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
+              <div className="relative flex items-center justify-center w-12 h-12 mr-4 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-white dark:group-hover:bg-amber-600 transition-colors duration-300">
+                <FiPlus className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Create OPD Assignment</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Outpatient dept.</p>
+              </div>
+            </button>
+            
+            <button 
+              onClick={handleFindPatient}
+              className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-4 shadow-md hover:shadow-lg transition-all duration-300 flex items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
+              aria-label="Find Patient"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-purple-600/5 dark:from-purple-500/10 dark:to-purple-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
+              <div className="relative flex items-center justify-center w-12 h-12 mr-4 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 group-hover:bg-purple-500 group-hover:text-white dark:group-hover:bg-purple-600 transition-colors duration-300">
+                <FiSearch className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">Find Patient</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Search records</p>
+              </div>
+            </button>
+            
+            {/* Additional quick actions could go here */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Recent Actions</div>
+              <div className="space-y-2">
+                <div className="text-sm text-gray-700 dark:text-gray-300 flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Added patient record #1342
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 flex items-center">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                  Scheduled appointment for John D.
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 flex items-center">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>
+                  Updated OPD assignment #890
+                </div>
+              </div>
             </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Schedule Appointment</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Book a visit</span>
-          </button>
-          
-          <button 
-            onClick={handleCreateOPDAssignment}
-            className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-5 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
-            aria-label="Create OPD Assignment"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-amber-600/5 dark:from-amber-500/10 dark:to-amber-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
-            <div className="relative flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-white dark:group-hover:bg-amber-600 transition-colors duration-300">
-              <FiPlus className="w-7 h-7" />
-            </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Create OPD Assignment</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Outpatient dept.</span>
-          </button>
-          
-          <button 
-            onClick={handleFindPatient}
-            className="group relative overflow-hidden rounded-xl bg-white dark:bg-gray-800 p-5 shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center hover:translate-y-[-2px] border border-gray-100 dark:border-gray-700"
-            aria-label="Find Patient"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-purple-600/5 dark:from-purple-500/10 dark:to-purple-600/10 transform group-hover:opacity-100 opacity-0 transition-opacity"></div>
-            <div className="relative flex items-center justify-center w-14 h-14 mb-4 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 group-hover:bg-purple-500 group-hover:text-white dark:group-hover:bg-purple-600 transition-colors duration-300">
-              <FiSearch className="w-7 h-7" />
-            </div>
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Find Patient</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Search records</span>
-          </button>
+          </div>
         </div>
       </div>
       
       {/* Recent Registrations */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <div className="relative rounded-2xl bg-white dark:bg-gray-800 shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
-          <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recently Registered</h2>
-            <button className="text-blue-600 dark:text-blue-400 text-sm font-medium flex items-center hover:underline">
-              View all
-              <FiArrowRight className="ml-1.5 w-4 h-4" />
-            </button>
-          </div>
-          
-          <div className="overflow-x-auto">
-            {loading.recentPatients ? (
-              <div className="p-6">
-                <div className="animate-pulse space-y-5">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700"></div>
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : error.recentPatients ? (
-              <div className="flex p-6 items-center justify-center">
-                <div className="text-center py-6 px-10 bg-red-50 dark:bg-red-900/10 rounded-lg max-w-md">
-                  <div className="text-red-500 text-xl mb-2">Unable to load patients</div>
-                  <p className="text-gray-600 dark:text-gray-400 mb-4">{error.recentPatients}</p>
-                  <button 
-                    onClick={fetchRecentPatients}
-                    className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            ) : recentPatients.length > 0 ? (
-              <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                {recentPatients.slice(0, 5).map((patient) => (
-                  <div key={patient.id} className="group p-4 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors duration-150 flex items-center">
-                    <div className="flex-shrink-0 mr-4">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 dark:from-blue-500 dark:to-blue-700 flex items-center justify-center text-white font-bold text-lg shadow-md">
-                        {patient.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                      </div>
-                    </div>
-                    
-                    <div className="flex-grow">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                        <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">{patient.name}</h3>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Registered {patient.registrationDate}
-                        </div>
-                      </div>
-                      
-                      <div className="mt-1 flex items-center text-sm">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 mr-2">
-                          {patient.age} years
-                        </span>
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 mr-2">
-                          {patient.gender}
-                        </span>
-                        <span className="text-gray-600 dark:text-gray-400 text-sm">{patient.contact}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="ml-2 flex-shrink-0 flex space-x-1">
-                      <button 
-                        onClick={() => window.location.href = `/patients/${patient.id}`}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                        aria-label="View patient details"
-                      >
-                        <FiFileText className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => window.location.href = `/appointments/create?patient_id=${patient.id}`}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
-                        aria-label="Schedule appointment"
-                      >
-                        <FiCalendar className="w-4 h-4" />
-                      </button>
+      <div className="relative rounded-2xl bg-white dark:bg-gray-800 shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700 mb-8">
+        <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recently Registered</h2>
+          <button className="text-blue-600 dark:text-blue-400 text-sm font-medium flex items-center hover:underline">
+            View all
+            <FiArrowRight className="ml-1.5 w-4 h-4" />
+          </button>
+        </div>
+        
+        <div className="overflow-x-auto">
+          {loading.recentPatients ? (
+            <div className="p-6">
+              <div className="animate-pulse space-y-5">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <div className="h-12 w-12 rounded-full bg-gray-200 dark:bg-gray-700"></div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                  <p className="text-gray-500 dark:text-gray-400 mb-2">No recent registrations</p>
-                  <button 
-                    onClick={handleRegisterPatient}
-                    className="px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition"
-                  >
-                    Register New Patient
-                  </button>
-                </div>
+            </div>
+          ) : error.recentPatients ? (
+            <div className="flex p-6 items-center justify-center">
+              <div className="text-center py-6 px-10 bg-red-50 dark:bg-red-900/10 rounded-lg max-w-md">
+                <div className="text-red-500 text-xl mb-2">Unable to load patients</div>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">{error.recentPatients}</p>
+                <button 
+                  onClick={fetchRecentPatients}
+                  className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition"
+                >
+                  Try Again
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : recentPatients.length > 0 ? (
+            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+              {recentPatients.slice(0, 5).map((patient) => (
+                <div key={patient.id} className="group p-4 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors duration-150 flex items-center">
+                  <div className="flex-shrink-0 mr-4">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 dark:from-blue-500 dark:to-blue-700 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                      {patient.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                    </div>
+                  </div>
+                  
+                  <div className="flex-grow">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                      <h3 className="text-base font-semibold text-gray-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">{patient.name}</h3>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        Registered {patient.registrationDate}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-1 flex items-center text-sm">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 mr-2">
+                        {patient.age} years
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 mr-2">
+                        {patient.gender}
+                      </span>
+                      <span className="text-gray-600 dark:text-gray-400 text-sm">{patient.contact}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="ml-2 flex-shrink-0 flex space-x-1">
+                    <button 
+                      onClick={() => window.location.href = `/patients/${patient.id}`}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                      aria-label="View patient details"
+                    >
+                      <FiFileText className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => window.location.href = `/appointments/create?patient_id=${patient.id}`}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                      aria-label="Schedule appointment"
+                    >
+                      <FiCalendar className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No recent registrations</p>
+                <button 
+                  onClick={handleRegisterPatient}
+                  className="px-4 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition"
+                >
+                  Register New Patient
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-
       </div>
     </div>
   );

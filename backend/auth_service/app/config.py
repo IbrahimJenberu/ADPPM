@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USERNAME: str = os.getenv("SMTP_USERNAME", "")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@adppm.com")
+    EMAIL_FROM: str = os.getenv("FROM_EMAIL", "noreply@adppm.com")
 
     VALID_ROLES: List[str] = ["admin", "doctor", "labroom", "cardroom"]
 
