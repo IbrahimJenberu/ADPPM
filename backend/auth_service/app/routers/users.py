@@ -115,6 +115,7 @@ async def update_current_user_profile(
     Raises:
         UserNotFoundException: If user not found
         ResourceExistsException: If attempting to update email to one that already exists
+        HTTPException: If no valid fields to update
     """
     async with route_analytics(request):
         logger.info(f"User {current_user['id']} is updating their profile")
@@ -124,18 +125,25 @@ async def update_current_user_profile(
         
         # Restrict which fields can be updated by regular users
         allowed_fields = {"full_name", "department"}
-        update_data = {k: v for k, v in update_data.items() if k in allowed_fields}
+        filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
         
-        if not update_data:
+        if not filtered_data:
             logger.warning(f"No valid fields to update for user {current_user['id']}")
-            return current_user
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid fields to update. Allowed fields: full_name, department"
+            )
+        
+        # Log what's being updated
+        update_summary = ", ".join([f"{k}='{v}'" for k, v in filtered_data.items()])
+        logger.info(f"Updating user {current_user['id']} with: {update_summary}")
         
         try:
             # Update the user with only allowed fields
             updated_user = await UserModel.update_user(
                 conn, 
                 current_user["id"],
-                **update_data
+                **filtered_data
             )
             
             if not updated_user:
@@ -185,7 +193,7 @@ async def change_password(
     Raises:
         InvalidCredentialsException: If current password is incorrect
         ResourceNotFoundException: If user not found
-        HTTPException: If new password doesn't meet requirements
+        HTTPException: If new password validation fails
     """
     async with route_analytics(request):
         logger.info(f"User {current_user['id']} is attempting to change password")
@@ -195,24 +203,31 @@ async def change_password(
             logger.warning(f"Invalid current password provided for user {current_user['id']}")
             raise InvalidCredentialsException(detail="Current password is incorrect")
         
-        # Password validation is handled by Pydantic validator in ChangePasswordRequest schema
+        # Check if new password is same as current (additional validation)
+        if password_data.current_password == password_data.new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from current password"
+            )
         
         # Hash the new password
         password_hash = get_password_hash(password_data.new_password)
         
-        # Update password in database
-        success = await UserModel.update_password(conn, current_user["id"], password_hash)
-        
-        if not success:
-            logger.error(f"Failed to update password for user: {current_user['id']}")
-            raise ResourceNotFoundException("User")
-        
-        # Revoke all existing refresh tokens for security
-        await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
+        # Use a transaction for atomicity
+        async with conn.transaction():
+            # Update password in database
+            success = await UserModel.update_password(conn, current_user["id"], password_hash)
+            
+            if not success:
+                logger.error(f"Failed to update password for user: {current_user['id']}")
+                raise ResourceNotFoundException("User")
+            
+            # Revoke all existing refresh tokens for security
+            revoked_count = await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
+            logger.info(f"Revoked {revoked_count} refresh tokens for user {current_user['id']}")
         
         logger.info(f"Password changed successfully for user {current_user['id']}")
         return {"message": "Password updated successfully"}
-
 
 @router.get("", response_model=UserList)
 async def get_users(
