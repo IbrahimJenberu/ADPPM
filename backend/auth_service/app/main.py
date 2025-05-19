@@ -62,3 +62,16 @@ app.middleware("http")(analytics_middleware)
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "auth_service"}
+
+# Add to main.py or a separate health check module
+@app.get("/health/email", tags=["Health"])
+async def email_health_check():
+    """Email configuration health check."""
+    config_ok, msg = settings.check_email_configuration()
+    status = "healthy" if config_ok else "warning"
+    return {
+        "status": status,
+        "service": "email",
+        "message": msg if not config_ok else "Email configuration valid",
+        "configured": config_ok
+    }

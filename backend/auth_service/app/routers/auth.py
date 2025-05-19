@@ -79,9 +79,15 @@ async def register_user(
     
     # Send welcome email (non-blocking)
     try:
-        await send_welcome_email(user_data.email, user_data.username)
+        success, error_msg = await send_welcome_email(user_data.email, user_data.username)
+        if not success:
+            logger.warning(f"Failed to send welcome email to {user_data.email}: {error_msg}")
+            
+            # Log a system alert for operations team if SMTP not configured
+            if "SMTP credentials not configured" in error_msg:
+                logger.warning("SYSTEM ALERT: SMTP credentials not configured. Welcome emails cannot be sent!")
     except Exception as e:
-        logger.error(f"Error sending welcome email: {e}")
+        logger.error(f"Error sending welcome email: {str(e)}")
         # Continue even if email fails
     
     return user
@@ -264,9 +270,23 @@ async def request_password_reset(
         )
         
         # Send email
-        await send_password_reset_email(user["email"], token)
+        success, error_msg = await send_password_reset_email(user["email"], token)
+        
+        if not success:
+            # Log the email sending failure but don't expose it to the client
+            logger.error(f"Failed to send password reset email to {user['email']}: {error_msg}")
+            
+            # Log a system alert for operations team to fix SMTP configuration
+            if "SMTP credentials not configured" in error_msg:
+                logger.critical("SYSTEM ALERT: SMTP credentials not configured. Password reset emails cannot be sent!")
+            
+            # Consider adding a notification to the admin dashboard about the email configuration issue
+        else:
+            logger.info(f"Password reset email sent successfully to: {user['email']}")
         
         logger.info(f"Password reset requested for: {user['email']}")
+    else:
+        logger.info(f"Password reset requested for non-existent email: {reset_data.email}")
     
     # Always return success to prevent email enumeration
     return {"message": "Password reset instructions sent if email exists"}
