@@ -489,17 +489,19 @@ export default function DoctorAIDiagnosis() {
     return { ...defaultSymptomData };
   });
   
-  // API URL
-  const API_URL = 'http://127.0.0.1:8000';
+  // API URLs - each for different analysis types
+  const XRAY_API_URL = 'http://127.0.0.1:8000'; // Original X-ray API
+  const SYMPTOM_API_URL = 'http://127.0.0.1:8001'; // Original symptom analysis API
+  const MRI_API_URL = 'http://127.0.0.1:8004'; // New brain MRI API
   
   // Helper function to check if the API is available
-  const checkApiAvailability = async () => {
+  const checkApiAvailability = async (apiUrl) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
       
       // Check a known endpoint that should respond quickly
-      const response = await fetch(`${API_URL}/`, { 
+      const response = await fetch(`${apiUrl}/`, { 
         method: 'GET',
         signal: controller.signal
       });
@@ -507,7 +509,7 @@ export default function DoctorAIDiagnosis() {
       clearTimeout(timeoutId);
       return response.ok;
     } catch (error) {
-      console.log("API server is unavailable:", error);
+      console.log(`API server at ${apiUrl} is unavailable:`, error);
       return false;
     }
   };
@@ -526,13 +528,14 @@ export default function DoctorAIDiagnosis() {
   
   // Check API availability on component mount
   useEffect(() => {
-    const checkApi = async () => {
-      const isAvailable = await checkApiAvailability();
-      setIsApiAvailable(isAvailable);
-      console.log("API availability:", isAvailable ? "API server is available" : "Using local mock data");
+    const checkApis = async () => {
+      // For simplicity, just check the MRI API since that's the one we're focusing on
+      const isMriApiAvailable = await checkApiAvailability(MRI_API_URL);
+      setIsApiAvailable(isMriApiAvailable);
+      console.log("MRI API availability:", isMriApiAvailable ? "API server is available" : "Using local mock data");
     };
     
-    checkApi();
+    checkApis();
   }, []);
   
   // Save state to localStorage when it changes
@@ -627,25 +630,41 @@ export default function DoctorAIDiagnosis() {
   // Load heatmap image when heatmapResult changes
   useEffect(() => {
     const loadHeatmapImage = async () => {
-      if (heatmapResult?.path && isApiAvailable) {
+      if (activeTab === 'mri' && heatmapResult?.heatmap_url && isApiAvailable) {
         setIsLoadingHeatmapImage(true);
         try {
-          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`;
+          // For MRI analysis, we use the specific heatmap_url from the MRI API
+          const imageUrl = `${MRI_API_URL}${heatmapResult.heatmap_url}`;
           setHeatmapImageUrl(imageUrl);
         } catch (err) {
-          console.error("Error loading heatmap image:", err);
+          console.error("Error loading MRI heatmap image:", err);
           setHeatmapImageUrl(null);
         } finally {
           setIsLoadingHeatmapImage(false);
         }
-      } else if (heatmapResult?.path) {
-        // For demo mode, create a mock image URL
-        setHeatmapImageUrl('https://i.imgur.com/JwGJtgZ.png');
+      } else if (activeTab === 'xray' && heatmapResult?.path && isApiAvailable) {
+        // Keep the original X-ray heatmap loading logic
+        setIsLoadingHeatmapImage(true);
+        try {
+          const imageUrl = `${XRAY_API_URL}/heatmaps/${encodeURIComponent(heatmapResult.path)}`;
+          setHeatmapImageUrl(imageUrl);
+        } catch (err) {
+          console.error("Error loading X-ray heatmap image:", err);
+          setHeatmapImageUrl(null);
+        } finally {
+          setIsLoadingHeatmapImage(false);
+        }
+      } else if (heatmapResult) {
+        // For demo mode when API is unavailable
+        const demoImageUrl = activeTab === 'mri' ? 
+          'https://i.imgur.com/DHEf1vy.png' : 
+          'https://i.imgur.com/JwGJtgZ.png';
+        setHeatmapImageUrl(demoImageUrl);
       }
     };
     
     loadHeatmapImage();
-  }, [heatmapResult, isApiAvailable]);
+  }, [heatmapResult, isApiAvailable, activeTab]);
   
   // Handle tab changes without losing state
   const handleTabChange = (tab) => {
@@ -785,7 +804,7 @@ export default function DoctorAIDiagnosis() {
     });
   };
   
-  // Analyze functions split by tab type
+  // Keeping the original X-ray analysis function
   const handleAnalyzeXray = async () => {
     if (!xrayPreviewUrl) {
       setToast({
@@ -804,7 +823,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available - if it's not, we'll use mock data
-      const apiAvailable = await checkApiAvailability();
+      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -831,7 +850,7 @@ export default function DoctorAIDiagnosis() {
         formData.append('model_type', xraySelectedModel);
         
         // Make API request to the prediction endpoint
-        const response = await fetch(`${API_URL}/predict`, {
+        const response = await fetch(`${XRAY_API_URL}/predict`, {
           method: 'POST',
           body: formData,
         });
@@ -939,6 +958,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
+  // Updated MRI analysis function to use the new backend API
   const handleAnalyzeMri = async () => {
     if (!mriPreviewUrl) {
       setToast({
@@ -956,29 +976,161 @@ export default function DoctorAIDiagnosis() {
     const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
     
     try {
-      // For MRI, we'll primarily use mock data since the backend is focused on X-rays
-      // But we'll check API availability to be consistent with the UX
-      const apiAvailable = await checkApiAvailability();
+      // Check if the MRI API is available
+      const apiAvailable = await checkApiAvailability(MRI_API_URL);
       
-      // Wait at least the minimum time to show the scanning animation
-      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
-      
-      // Realistic MRI analysis results
-      setAnalysisResults({
-        findings: "The brain MRI demonstrates a well-circumscribed T2 hyperintense lesion in the right frontal lobe measuring approximately 2.3 cm in diameter with minimal surrounding edema. No evidence of mass effect or midline shift. No abnormal enhancement noted post-contrast.",
-        impression: "Right frontal lobe lesion most consistent with a low-grade glioma. Recommend neurosurgical consultation and follow-up imaging in 4-6 weeks.",
-        probability: 0.82,
-        differentials: [
-          { condition: "Low-grade Glioma", probability: 0.82 },
-          { condition: "Demyelinating Lesion", probability: 0.12 },
-          { condition: "Inflammatory/Infectious Process", probability: 0.06 }
-        ]
-      });
-      
-      setToast({
-        type: 'success',
-        message: 'MRI analysis completed successfully.'
-      });
+      // If API is available, use it
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
+        
+        // If we have a real file object, use it
+        if (mriFile) {
+          formData.append('file', mriFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (mriPreviewUrl) {
+          const blob = await dataURLtoBlob(mriPreviewUrl);
+          if (blob) {
+            const file = new File([blob], mriFileName || 'mri-image.png', { 
+              type: mriFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        // Make API request to the brain MRI prediction endpoint
+        const response = await fetch(`${MRI_API_URL}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("MRI API response data:", data);
+        
+        // Format based on the brain tumor classification endpoint format
+        // The response includes 'label', 'confidence', and 'scores' with specific tumor types
+        const tumorType = data.label;
+        
+        // Create more descriptive findings text based on tumor type
+        let findingsText = "The brain MRI demonstrates ";
+        let impressionText = "";
+        
+        switch(tumorType) {
+          case 'glioma':
+            findingsText += "an infiltrative lesion with irregular borders and heterogeneous signal intensity, consistent with a glioma. The lesion shows variable enhancement with contrast and is associated with surrounding vasogenic edema.";
+            impressionText = "The features are most consistent with a glioma. Recommend neurosurgical consultation for potential biopsy planning.";
+            break;
+          case 'meningioma':
+            findingsText += "an extra-axial, well-circumscribed mass with a broad dural base, showing homogeneous enhancement post-contrast. The mass appears to arise from the meninges.";
+            impressionText = "The features are characteristic of a meningioma. These are typically benign tumors that may require surgical resection if symptomatic.";
+            break;
+          case 'pituitary':
+            findingsText += "a well-defined lesion centered in the sella turcica, with suprasellar extension. The lesion shows homogeneous enhancement with contrast.";
+            impressionText = "The findings are consistent with a pituitary adenoma. Recommend endocrinological work-up to assess for functional status.";
+            break;
+          case 'notumor':
+            findingsText += "no evidence of an intracranial mass, abnormal enhancement, or structural abnormality. The brain parenchyma appears normal with no signs of edema, mass effect, or midline shift.";
+            impressionText = "Normal brain MRI with no evidence of tumor.";
+            break;
+          default:
+            findingsText += "abnormal findings that require further radiological assessment.";
+            impressionText = "Indeterminate findings. Consider consultation with a neuroradiologist.";
+        }
+        
+        // Format the results to include proper differential diagnoses based on the scores from the API
+        const formattedResults = {
+          findings: findingsText,
+          impression: impressionText,
+          probability: data.confidence,
+          differentials: Object.entries(data.scores)
+            .map(([condition, probability]) => ({
+              condition: condition.charAt(0).toUpperCase() + condition.slice(1),
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setAnalysisResults(formattedResults);
+        setToast({
+          type: 'success',
+          message: 'MRI analysis completed successfully.'
+        });
+      } else {
+        // Use mock data when API is unavailable
+        // Wait at least the minimum time to show the scanning animation
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+        
+        // Mock data for brain tumor analysis
+        const mockData = {
+          label: "glioma",
+          confidence: 0.76,
+          scores: {
+            glioma: 0.76,
+            meningioma: 0.14,
+            notumor: 0.02,
+            pituitary: 0.08
+          }
+        };
+        
+        // Create more descriptive findings text based on mock tumor type
+        let findingsText = "The brain MRI demonstrates ";
+        let impressionText = "";
+        
+        switch(mockData.label) {
+          case 'glioma':
+            findingsText += "an infiltrative lesion with irregular borders and heterogeneous signal intensity, consistent with a glioma. The lesion shows variable enhancement with contrast and is associated with surrounding vasogenic edema.";
+            impressionText = "The features are most consistent with a glioma. Recommend neurosurgical consultation for potential biopsy planning.";
+            break;
+          case 'meningioma':
+            findingsText += "an extra-axial, well-circumscribed mass with a broad dural base, showing homogeneous enhancement post-contrast. The mass appears to arise from the meninges.";
+            impressionText = "The features are characteristic of a meningioma. These are typically benign tumors that may require surgical resection if symptomatic.";
+            break;
+          case 'pituitary':
+            findingsText += "a well-defined lesion centered in the sella turcica, with suprasellar extension. The lesion shows homogeneous enhancement with contrast.";
+            impressionText = "The findings are consistent with a pituitary adenoma. Recommend endocrinological work-up to assess for functional status.";
+            break;
+          case 'notumor':
+            findingsText += "no evidence of an intracranial mass, abnormal enhancement, or structural abnormality. The brain parenchyma appears normal with no signs of edema, mass effect, or midline shift.";
+            impressionText = "Normal brain MRI with no evidence of tumor.";
+            break;
+          default:
+            findingsText += "abnormal findings that require further radiological assessment.";
+            impressionText = "Indeterminate findings. Consider consultation with a neuroradiologist.";
+        }
+        
+        // Format the results to include proper differential diagnoses based on the scores from the mock data
+        const formattedResults = {
+          findings: findingsText,
+          impression: impressionText,
+          probability: mockData.confidence,
+          differentials: Object.entries(mockData.scores)
+            .map(([condition, probability]) => ({
+              condition: condition.charAt(0).toUpperCase() + condition.slice(1),
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        setAnalysisResults(formattedResults);
+        
+        setToast({
+          type: 'info',
+          message: 'Server unavailable. Using demo data for MRI analysis.'
+        });
+      }
     } catch (err) {
       console.error("Error analyzing MRI scan:", err);
       
@@ -999,7 +1151,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // New combined analyze and generate heatmap function for X-ray
+  // Keeping original X-ray combined analysis and heatmap function
   const handleAnalyzeAndGenerateHeatmap = async () => {
     if (!xrayPreviewUrl) {
       setToast({
@@ -1018,7 +1170,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available
-      const apiAvailable = await checkApiAvailability();
+      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -1045,7 +1197,7 @@ export default function DoctorAIDiagnosis() {
         formData.append('model_type', xraySelectedModel);
         
         // First analyze the X-ray
-        const analysisResponse = await fetch(`${API_URL}/predict`, {
+        const analysisResponse = await fetch(`${XRAY_API_URL}/predict`, {
           method: 'POST',
           body: formData,
         });
@@ -1103,7 +1255,7 @@ export default function DoctorAIDiagnosis() {
         
         heatmapFormData.append('model_type', xraySelectedModel);
         
-        const heatmapResponse = await fetch(`${API_URL}/heatmap`, {
+        const heatmapResponse = await fetch(`${XRAY_API_URL}/heatmap`, {
           method: 'POST',
           body: heatmapFormData,
         });
@@ -1123,9 +1275,9 @@ export default function DoctorAIDiagnosis() {
         
         setHeatmapResult(heatmapData);
         
-        // Immediately fetch the heatmap image
+        // Immediately set the heatmap image URL for X-ray using the original format
         if (heatmapData.path) {
-          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapData.path)}`;
+          const imageUrl = `${XRAY_API_URL}/heatmaps/${heatmapData.path}`;
           setHeatmapImageUrl(imageUrl);
         }
         
@@ -1203,7 +1355,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Combined analyze and generate heatmap for MRI - uses the same API as X-ray with fixed model type
+  // Updated MRI combined analysis and heatmap function
   const handleAnalyzeAndGenerateMriHeatmap = async () => {
     if (!mriPreviewUrl) {
       setToast({
@@ -1221,34 +1373,209 @@ export default function DoctorAIDiagnosis() {
     const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
     
     try {
-      // Wait at least the minimum time to show the scanning animation
-      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+      // Check if the MRI API is available
+      const apiAvailable = await checkApiAvailability(MRI_API_URL);
       
-      // For demonstration, generate realistic brain MRI analysis results
-      setAnalysisResults({
-        findings: "The brain MRI demonstrates a well-circumscribed T2 hyperintense lesion in the right frontal lobe measuring approximately 2.3 cm in diameter with minimal surrounding edema. No evidence of mass effect or midline shift. No abnormal enhancement noted post-contrast.",
-        impression: "Right frontal lobe lesion most consistent with a low-grade glioma. Recommend neurosurgical consultation and follow-up imaging in 4-6 weeks.",
-        probability: 0.82,
-        differentials: [
-          { condition: "Low-grade Glioma", probability: 0.82 },
-          { condition: "Demyelinating Lesion", probability: 0.12 },
-          { condition: "Inflammatory/Infectious Process", probability: 0.06 }
-        ]
-      });
-      
-      const mockHeatmapResult = {
-        path: `mri_heatmap_Glioma_${new Date().toISOString().slice(0,10)}.png`
-      };
-      
-      setHeatmapResult(mockHeatmapResult);
-      
-      // Set a demo heatmap image URL for visualization
-      setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
-      
-      setToast({
-        type: 'success',
-        message: 'MRI analysis and heatmap generation completed successfully.'
-      });
+      // If API is available, use it
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
+        
+        // If we have a real file object, use it
+        if (mriFile) {
+          formData.append('file', mriFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (mriPreviewUrl) {
+          const blob = await dataURLtoBlob(mriPreviewUrl);
+          if (blob) {
+            const file = new File([blob], mriFileName || 'mri-image.png', { 
+              type: mriFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        // First analyze the MRI scan
+        const analysisResponse = await fetch(`${MRI_API_URL}/predict`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!analysisResponse.ok) {
+          throw new Error(`Analysis failed: ${analysisResponse.status}: ${analysisResponse.statusText}`);
+        }
+        
+        const analysisData = await analysisResponse.json();
+        console.log("MRI API analysis response:", analysisData);
+        
+        // The brain tumor classification model returns specific label types
+        const tumorType = analysisData.label;
+        
+        // Create more descriptive findings text based on tumor type
+        let findingsText = "The brain MRI demonstrates ";
+        let impressionText = "";
+        
+        switch(tumorType) {
+          case 'glioma':
+            findingsText += "an infiltrative lesion with irregular borders and heterogeneous signal intensity, consistent with a glioma. The lesion shows variable enhancement with contrast and is associated with surrounding vasogenic edema.";
+            impressionText = "The features are most consistent with a glioma. Recommend neurosurgical consultation for potential biopsy planning.";
+            break;
+          case 'meningioma':
+            findingsText += "an extra-axial, well-circumscribed mass with a broad dural base, showing homogeneous enhancement post-contrast. The mass appears to arise from the meninges.";
+            impressionText = "The features are characteristic of a meningioma. These are typically benign tumors that may require surgical resection if symptomatic.";
+            break;
+          case 'pituitary':
+            findingsText += "a well-defined lesion centered in the sella turcica, with suprasellar extension. The lesion shows homogeneous enhancement with contrast.";
+            impressionText = "The findings are consistent with a pituitary adenoma. Recommend endocrinological work-up to assess for functional status.";
+            break;
+          case 'notumor':
+            findingsText += "no evidence of an intracranial mass, abnormal enhancement, or structural abnormality. The brain parenchyma appears normal with no signs of edema, mass effect, or midline shift.";
+            impressionText = "Normal brain MRI with no evidence of tumor.";
+            break;
+          default:
+            findingsText += "abnormal findings that require further radiological assessment.";
+            impressionText = "Indeterminate findings. Consider consultation with a neuroradiologist.";
+        }
+        
+        // Format the results to include proper differential diagnoses based on the scores from the API
+        const formattedResults = {
+          findings: findingsText,
+          impression: impressionText,
+          probability: analysisData.confidence,
+          differentials: Object.entries(analysisData.scores)
+            .map(([condition, probability]) => ({
+              condition: condition.charAt(0).toUpperCase() + condition.slice(1),
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        setAnalysisResults(formattedResults);
+        
+        // Now generate the heatmap using the MRI API
+        const heatmapFormData = new FormData();
+        
+        // If we have a real file object, use it
+        if (mriFile) {
+          heatmapFormData.append('file', mriFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (mriPreviewUrl) {
+          const blob = await dataURLtoBlob(mriPreviewUrl);
+          if (blob) {
+            const file = new File([blob], mriFileName || 'mri-image.png', { 
+              type: mriFileType || 'image/png' 
+            });
+            heatmapFormData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        const heatmapResponse = await fetch(`${MRI_API_URL}/heatmap`, {
+          method: 'POST',
+          body: heatmapFormData,
+        });
+        
+        if (!heatmapResponse.ok) {
+          throw new Error(`Heatmap generation failed: ${heatmapResponse.status}: ${heatmapResponse.statusText}`);
+        }
+        
+        const heatmapData = await heatmapResponse.json();
+        console.log("MRI Heatmap API response:", heatmapData);
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setHeatmapResult(heatmapData);
+        
+        // Set the heatmap image URL for MRI
+        if (heatmapData.heatmap_url) {
+          const imageUrl = `${MRI_API_URL}${heatmapData.heatmap_url}`;
+          setHeatmapImageUrl(imageUrl);
+        }
+        
+        setToast({
+          type: 'success',
+          message: 'MRI analysis and heatmap generation completed successfully.'
+        });
+      } else {
+        // For mock/demo functionality if API unavailable
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+        
+        // Mock data for brain tumor analysis
+        const mockData = {
+          label: "glioma",
+          confidence: 0.76,
+          scores: {
+            glioma: 0.76,
+            meningioma: 0.14,
+            notumor: 0.02,
+            pituitary: 0.08
+          }
+        };
+        
+        // Create more descriptive findings text based on mock tumor type
+        let findingsText = "The brain MRI demonstrates ";
+        let impressionText = "";
+        
+        switch(mockData.label) {
+          case 'glioma':
+            findingsText += "an infiltrative lesion with irregular borders and heterogeneous signal intensity, consistent with a glioma. The lesion shows variable enhancement with contrast and is associated with surrounding vasogenic edema.";
+            impressionText = "The features are most consistent with a glioma. Recommend neurosurgical consultation for potential biopsy planning.";
+            break;
+          case 'meningioma':
+            findingsText += "an extra-axial, well-circumscribed mass with a broad dural base, showing homogeneous enhancement post-contrast. The mass appears to arise from the meninges.";
+            impressionText = "The features are characteristic of a meningioma. These are typically benign tumors that may require surgical resection if symptomatic.";
+            break;
+          case 'pituitary':
+            findingsText += "a well-defined lesion centered in the sella turcica, with suprasellar extension. The lesion shows homogeneous enhancement with contrast.";
+            impressionText = "The findings are consistent with a pituitary adenoma. Recommend endocrinological work-up to assess for functional status.";
+            break;
+          case 'notumor':
+            findingsText += "no evidence of an intracranial mass, abnormal enhancement, or structural abnormality. The brain parenchyma appears normal with no signs of edema, mass effect, or midline shift.";
+            impressionText = "Normal brain MRI with no evidence of tumor.";
+            break;
+          default:
+            findingsText += "abnormal findings that require further radiological assessment.";
+            impressionText = "Indeterminate findings. Consider consultation with a neuroradiologist.";
+        }
+        
+        // Format the results to include proper differential diagnoses based on the scores from the mock data
+        const formattedResults = {
+          findings: findingsText,
+          impression: impressionText,
+          probability: mockData.confidence,
+          differentials: Object.entries(mockData.scores)
+            .map(([condition, probability]) => ({
+              condition: condition.charAt(0).toUpperCase() + condition.slice(1),
+              probability: parseFloat(probability)
+            }))
+            .sort((a, b) => b.probability - a.probability)
+        };
+        
+        setAnalysisResults(formattedResults);
+        
+        const mockHeatmapResult = {
+          heatmap_url: `/heatmaps/heatmap_${mockData.label}_${new Date().toISOString().slice(0,10)}.png`
+        };
+        
+        setHeatmapResult(mockHeatmapResult);
+        
+        // Set a demo heatmap image URL for visualization
+        setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
+        
+        setToast({
+          type: 'info',
+          message: 'Server unavailable. Using demo data for MRI analysis and heatmap.'
+        });
+      }
     } catch (err) {
       console.error("Error in MRI analysis and heatmap generation:", err);
       
@@ -1268,6 +1595,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
+  // Keep original X-ray heatmap generation function
   const handleGenerateXrayHeatmap = async () => {
     if (!xrayPreviewUrl) {
       setToast({
@@ -1286,7 +1614,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available
-      const apiAvailable = await checkApiAvailability();
+      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -1313,7 +1641,7 @@ export default function DoctorAIDiagnosis() {
         formData.append('model_type', xraySelectedModel);
         
         // Make API request to the heatmap endpoint
-        const response = await fetch(`${API_URL}/heatmap`, {
+        const response = await fetch(`${XRAY_API_URL}/heatmap`, {
           method: 'POST',
           body: formData,
         });
@@ -1335,7 +1663,7 @@ export default function DoctorAIDiagnosis() {
         
         // Immediately fetch and set the heatmap image URL for display
         if (data.path) {
-          const imageUrl = `${API_URL}/download-heatmap?filename=${encodeURIComponent(data.path)}`;
+          const imageUrl = `${XRAY_API_URL}/heatmaps/${data.path}`;
           setHeatmapImageUrl(imageUrl);
         }
         
@@ -1352,7 +1680,7 @@ export default function DoctorAIDiagnosis() {
         
         // Create a mock heatmap result with a realistic filename
         const mockHeatmapResult = {
-          path: `xray_heatmaps_Lung Opacity_${new Date().toISOString().slice(0,10)}.png`
+          path: `heatmap_Lung Opacity_${new Date().toISOString().slice(0,10)}.png`
         };
         
         setHeatmapResult(mockHeatmapResult);
@@ -1388,7 +1716,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Generate MRI heatmap using the X-ray API with fixed model type
+  // Updated MRI heatmap generation function
   const handleGenerateMriHeatmap = async () => {
     if (!mriPreviewUrl) {
       setToast({
@@ -1406,23 +1734,87 @@ export default function DoctorAIDiagnosis() {
     const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
     
     try {
-      // Wait at least the minimum time to show the scanning animation
-      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+      // Check if the MRI API is available
+      const apiAvailable = await checkApiAvailability(MRI_API_URL);
       
-      // For demonstration, generate a mock heatmap
-      const mockHeatmapResult = {
-        path: `mri_heatmap_Glioma_${new Date().toISOString().slice(0,10)}.png`
-      };
-      
-      setHeatmapResult(mockHeatmapResult);
-      
-      // Set a demo heatmap image URL for visualization
-      setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
-      
-      setToast({
-        type: 'success',
-        message: 'MRI heatmap generated successfully.'
-      });
+      // If API is available, use it
+      if (apiAvailable) {
+        // Create form data for the API request
+        const formData = new FormData();
+        
+        // If we have a real file object, use it
+        if (mriFile) {
+          formData.append('file', mriFile);
+        } 
+        // Otherwise create a file from the preview URL
+        else if (mriPreviewUrl) {
+          const blob = await dataURLtoBlob(mriPreviewUrl);
+          if (blob) {
+            const file = new File([blob], mriFileName || 'mri-image.png', { 
+              type: mriFileType || 'image/png' 
+            });
+            formData.append('file', file);
+          } else {
+            throw new Error('Failed to create file from image preview');
+          }
+        }
+        
+        // Make API request to the MRI heatmap endpoint
+        const response = await fetch(`${MRI_API_URL}/heatmap`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("MRI Heatmap response:", data);
+        
+        // Ensure we wait at least the minimum time
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        setHeatmapResult(data);
+        
+        // Set the heatmap image URL for MRI
+        if (data.heatmap_url) {
+          const imageUrl = `${MRI_API_URL}${data.heatmap_url}`;
+          setHeatmapImageUrl(imageUrl);
+        }
+        
+        setDownloadSuccess(false);
+        setDownloadError(null);
+        
+        setToast({
+          type: 'success',
+          message: 'MRI heatmap generated successfully.'
+        });
+      } else {
+        // For mock/demo functionality if API unavailable
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+        
+        // Create a mock heatmap result
+        const mockHeatmapResult = {
+          heatmap_url: `/heatmaps/heatmap_brain_${new Date().toISOString().slice(0,10)}.png`
+        };
+        
+        setHeatmapResult(mockHeatmapResult);
+        
+        // Set a demo heatmap image URL for visualization
+        setHeatmapImageUrl('https://i.imgur.com/DHEf1vy.png');
+        
+        setDownloadSuccess(false);
+        setDownloadError(null);
+        
+        setToast({
+          type: 'info',
+          message: 'Server unavailable. Using demo data for MRI heatmap.'
+        });
+      }
     } catch (err) {
       console.error("Error generating MRI heatmap:", err);
       
@@ -1443,56 +1835,106 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Function to handle requesting the heatmap file from the server
+  // Updated function to handle downloading heatmap files from different endpoints
   const downloadHeatmapFile = async () => {
-    if (!heatmapResult || !heatmapResult.path) return;
+    if (!heatmapResult) return;
     
     setIsDownloading(true);
     setDownloadError(null);
     setDownloadSuccess(false);
     
     try {
-      // Check if API is available first
-      const apiAvailable = await checkApiAvailability();
-      
-      // If API is available, use it
-      if (apiAvailable) {
-        // Make a request to the download-heatmap endpoint
-        const response = await fetch(`${API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`);
+      if (activeTab === 'mri') {
+        // MRI heatmap download
+        // Check if MRI API is available first
+        const apiAvailable = await checkApiAvailability(MRI_API_URL);
         
-        if (!response.ok) {
-          throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+        // If API is available, use it
+        if (apiAvailable && heatmapResult.heatmap_url) {
+          // Extract the filename from the heatmap_url
+          const filename = heatmapResult.heatmap_url.split('/').pop();
+          
+          // Make a request to the download-heatmap endpoint for MRI
+          const response = await fetch(`${MRI_API_URL}/download-heatmap?filename=${encodeURIComponent(filename)}`);
+          
+          if (!response.ok) {
+            throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+          }
+          
+          // Get the blob from the response
+          const blob = await response.blob();
+          
+          // Create a download link and trigger it
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          
+          // Clean up
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          setDownloadSuccess(true);
+          setToast({
+            type: 'success',
+            message: 'MRI heatmap downloaded successfully.'
+          });
+        } else {
+          // Simulate download success in demo mode
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          setDownloadSuccess(true);
+          setToast({
+            type: 'success',
+            message: 'MRI heatmap downloaded successfully (demo mode).'
+          });
         }
-        
-        // Get the blob from the response
-        const blob = await response.blob();
-        
-        // Create a download link and trigger it
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = heatmapResult.path;
-        document.body.appendChild(a);
-        a.click();
-        
-        // Clean up
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        setDownloadSuccess(true);
-        setToast({
-          type: 'success',
-          message: 'Heatmap downloaded successfully.'
-        });
       } else {
-        // Simulate download success in demo mode
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // X-ray heatmap download - keep original logic
+        // Check if X-ray API is available first
+        const apiAvailable = await checkApiAvailability(XRAY_API_URL);
         
-        setDownloadSuccess(true);
-        setToast({
-          type: 'success',
-          message: 'Heatmap downloaded successfully (demo mode).'
-        });
+        // If API is available, use it
+        if (apiAvailable && heatmapResult.path) {
+          // For X-ray, we use the original heatmap fetch logic
+          const response = await fetch(`${XRAY_API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`);
+          
+          if (!response.ok) {
+            throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+          }
+          
+          // Get the blob from the response
+          const blob = await response.blob();
+          
+          // Create a download link and trigger it
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = heatmapResult.path;
+          document.body.appendChild(a);
+          a.click();
+          
+          // Clean up
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          
+          setDownloadSuccess(true);
+          setToast({
+            type: 'success',
+            message: 'X-ray heatmap downloaded successfully.'
+          });
+        } else {
+          // Simulate download success in demo mode
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          setDownloadSuccess(true);
+          setToast({
+            type: 'success',
+            message: 'X-ray heatmap downloaded successfully (demo mode).'
+          });
+        }
       }
       
       // Reset success notification after 3 seconds
@@ -1511,7 +1953,7 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Handler for symptom analysis using the backend API
+  // Keep original symptom analysis logic
   const handleSymptomAnalysis = async () => {
     setIsAnalyzing(true);
     setError(null);
@@ -1520,25 +1962,64 @@ export default function DoctorAIDiagnosis() {
     const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
     
     try {
-      // Wait at least the minimum time for user experience
-      await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+      // Check if API is available
+      const apiAvailable = await checkApiAvailability(SYMPTOM_API_URL);
       
-      // Fallback to mock data since the symptom analysis API wasn't mentioned in the backend code
-      setAnalysisResults({
-        impression: "Based on the symptom profile, the following conditions should be considered (demo mode):",
-        differentials: [
-          { condition: "Upper Respiratory Tract Infection", probability: 0.65 },
-          { condition: "Influenza", probability: 0.20 },
-          { condition: "COVID-19", probability: 0.10 },
-          { condition: "Allergic Rhinitis", probability: 0.05 }
-        ],
-        recommendations: "Recommend symptomatic treatment with rest, adequate hydration, and antipyretics as needed. Consider antigen testing for influenza and SARS-CoV-2. Follow up if symptoms worsen or persist beyond 7 days. Monitor for development of respiratory distress, high fever >102°F, or severe headache."
-      });
-      
-      setToast({
-        type: 'info',
-        message: 'Using demo data for symptom analysis.'
-      });
+      // If API is available, use it
+      if (apiAvailable) {
+        // Prepare data for API request
+        const apiData = { ...symptomData };
+        
+        // Make API request to the symptom analysis endpoint
+        const response = await fetch(`${SYMPTOM_API_URL}/ai-diagnosis/symptoms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(apiData),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log("Symptom analysis API response:", data);
+        
+        // Wait at least the minimum time for user experience
+        const elapsedTime = Date.now() - startTime;
+        if (elapsedTime < minimumWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
+        }
+        
+        // Format the API response for display
+        setAnalysisResults(data);
+        
+        setToast({
+          type: 'success',
+          message: 'Symptom analysis completed successfully.'
+        });
+      } else {
+        // Fallback to mock data when API is unavailable
+        // Wait at least the minimum time for user experience
+        await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
+        
+        setAnalysisResults({
+          impression: "Based on the symptom profile, the following conditions should be considered (demo mode):",
+          differentials: [
+            { condition: "Upper Respiratory Tract Infection", probability: 0.65 },
+            { condition: "Influenza", probability: 0.20 },
+            { condition: "COVID-19", probability: 0.10 },
+            { condition: "Allergic Rhinitis", probability: 0.05 }
+          ],
+          recommendations: "Recommend symptomatic treatment with rest, adequate hydration, and antipyretics as needed. Consider antigen testing for influenza and SARS-CoV-2. Follow up if symptoms worsen or persist beyond 7 days. Monitor for development of respiratory distress, high fever >102°F, or severe headache."
+        });
+        
+        setToast({
+          type: 'info',
+          message: 'Using demo data for symptom analysis.'
+        });
+      }
     } catch (err) {
       console.error("Error during symptom analysis:", err);
       
@@ -1670,7 +2151,7 @@ export default function DoctorAIDiagnosis() {
     
     const descriptionText = {
       'xray': 'Upload a chest X-ray image for AI analysis of pulmonary conditions. Our proprietary DEBNSNet model provides state-of-the-art diagnostic assistance.',
-      'mri': 'Upload brain MRI scans for AI-powered neurological assessment. Our neural network was trained on over 100,000 annotated images to identify anomalies with high precision.',
+      'mri': 'Upload brain MRI scans for AI-powered tumor classification. Our neural network was trained on thousands of annotated images to identify gliomas, meningiomas, and pituitary tumors with high precision.',
       'symptoms': 'Enter patient symptoms and information to receive AI-powered differential diagnoses. Our algorithm analyzes patterns across millions of clinical cases.'
     };
     
@@ -1985,7 +2466,7 @@ export default function DoctorAIDiagnosis() {
                               <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                           </span>  
-                          <span>Detects tumors and mass lesions</span>
+                          <span>Classifies brain tumor types (glioma, meningioma, pituitary)</span>
                         </li>
                         <li className="flex items-start">
                           <span className="mr-2 text-violet-500">
@@ -1993,7 +2474,7 @@ export default function DoctorAIDiagnosis() {
                               <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                           </span> 
-                          <span>Identifies vascular abnormalities</span>
+                          <span>Provides confidence scores for each tumor type</span>
                         </li>
                         <li className="flex items-start">
                           <span className="mr-2 text-purple-500">
@@ -2001,7 +2482,7 @@ export default function DoctorAIDiagnosis() {
                               <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                           </span> 
-                          <span>Analyzes white matter disease patterns</span>
+                          <span>Generates heatmaps showing tumor localization</span>
                         </li>
                         <li className="flex items-start">
                           <span className="mr-2 text-fuchsia-500">
@@ -2009,7 +2490,7 @@ export default function DoctorAIDiagnosis() {
                               <polyline points="20 6 9 17 4 12"></polyline>
                             </svg>
                           </span> 
-                          <span>Evaluates neurodegenerative markers</span>
+                          <span>Screens for normal/no-tumor cases</span>
                         </li>
                       </ul>
                     </div>
@@ -2665,12 +3146,12 @@ export default function DoctorAIDiagnosis() {
                     <div className="relative mb-3 bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden shadow-md border border-gray-200 dark:border-gray-700">
                       <img 
                         src={heatmapImageUrl} 
-                        alt={`AI Attention Heatmap for ${heatmapResult.path}`} 
+                        alt={`AI Attention Heatmap for ${activeTab === 'xray' ? 'X-ray' : 'MRI'}`} 
                         className="w-full h-auto object-contain"
                       />
                     </div>
                     <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-                      {heatmapResult.path}
+                      Heatmap visualization highlighting regions of interest
                     </p>
                   </div>
                 ) : isLoadingHeatmapImage ? (
@@ -2689,7 +3170,11 @@ export default function DoctorAIDiagnosis() {
                     </h4>
                     
                     <GradientBadge variant="secondary" className="mb-4 px-3 py-1">
-                      {heatmapResult.path}
+                      {activeTab === 'mri' && heatmapResult.heatmap_url 
+                        ? heatmapResult.heatmap_url.split('/').pop() 
+                        : activeTab === 'xray' && heatmapResult.path
+                          ? heatmapResult.path
+                          : 'heatmap.png'}
                     </GradientBadge>
                     
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 max-w-sm leading-relaxed">
