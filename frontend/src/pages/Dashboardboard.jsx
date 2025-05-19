@@ -4,7 +4,7 @@ import { useNavigate, Routes, Route, Navigate, useLocation, Link } from 'react-r
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { FiMenu, FiBell, FiHome, FiActivity, FiClipboard, 
   FiFileText, FiLayers, FiCalendar, FiSearch, FiUsers, FiSettings, 
-  FiChevronRight, FiChevronDown, FiChevronsLeft, FiUser, FiCheck, FiX, FiInfo, FiSlack } from 'react-icons/fi';
+  FiChevronRight, FiChevronDown, FiChevronsLeft, FiUser, FiCheck, FiX, FiInfo, FiSlack, FiBarChart2} from 'react-icons/fi';
 import { HiOutlineUserAdd, HiOutlineDocumentReport, HiOutlineChartBar, HiOutlineClock } from 'react-icons/hi';
 import { MdOutlineBiotech, MdOutlineHealthAndSafety, MdDashboard, MdOutlineNightlight, MdOutlineLightMode, MdTimeline } from 'react-icons/md';
 import { RiMentalHealthLine, RiPulseLine, RiStethoscopeLine, RiHealthBookLine, RiLogoutCircleRLine, RiShieldUserLine } from 'react-icons/ri';
@@ -26,6 +26,7 @@ import CardRoomAppointments from './CardRoom/Appointments';
 import OPDAssignment from './CardRoom/OPDAssignment';
 import AdminDashboard from './Admin/AdminDashboard';
 import UserManagement from './Admin/UserManagement';
+import Analytics from './Admin/Analytics';
 import LabDashboard from './LabTech/LabTechDashboard';
 import LabRequestsList from './LabTech/TestRequests';
 import TestResults from './LabTech/TestResults';
@@ -588,6 +589,7 @@ function Dashboard() {
         return [
           { icon: <MdDashboard className="w-5 h-5" />, text: 'Dashboard', path: '/dashboard/admin' },
           { icon: <FiUsers className="w-5 h-5" />, text: 'User Management', path: '/dashboard/admin/users' },
+          { icon: <FiBarChart2 className="w-5 h-5" />, text: "User Insights",       path: "/dashboard/admin/analytics" },
         ];
       default:
         return [];
@@ -1224,8 +1226,8 @@ function Dashboard() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      style={{ zIndex: 110 }} 
-                      className="absolute right-0 mt-2 w-56 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden border border-slate-200/70 dark:border-slate-700/70"
+                      style={{ zIndex: 99999 }} 
+                      className="absolute right-0 mt-2 w-56 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden border border-slate-200/70 dark:border-slate-700/70 z-[99999]"
                     >
                       <div className="p-4 border-b border-slate-200/70 dark:border-slate-700/70">
                         <div className="flex items-center">
@@ -1320,7 +1322,7 @@ function Dashboard() {
                 <>
                   <Route path="/admin" element={<PageTransition><AdminDashboard {...sharedProps} /></PageTransition>} />
                   <Route path="/admin/users" element={<PageTransition><UserManagement {...sharedProps} /></PageTransition>} />
-                  <Route path="/admin/settings" element={<PageTransition><div>System Settings</div></PageTransition>} />
+                  <Route path="/admin/analytics" element={<PageTransition><div>User Analytics</div></PageTransition>} />
                 </>
               )}
 

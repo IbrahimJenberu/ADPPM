@@ -390,6 +390,32 @@ const defaultSymptomData = {
   comorbidity_kidney_disease: 0
 };
 
+// Live API Status Indicator component
+const LiveApiIndicator = ({ isAvailable, type }) => {
+  if (isAvailable === null) return null;
+  
+  const labels = {
+    xray: "Live X-ray Analysis",
+    mri: "Live MRI Analysis",
+    symptoms: "Live Symptom Analysis"
+  };
+  
+  return (
+    <div className={`flex items-center rounded-lg text-xs font-medium px-2 py-1 absolute top-2 right-2 z-10 ${
+      isAvailable 
+        ? 'bg-green-500/90 text-white' 
+        : 'bg-amber-500/90 text-white'
+    }`}>
+      <div className={`w-2 h-2 rounded-full mr-1.5 ${
+        isAvailable ? 'bg-white animate-pulse' : 'bg-white/80'
+      }`}></div>
+      <span>
+        {isAvailable ? labels[type] : 'Demo Mode'}
+      </span>
+    </div>
+  );
+};
+
 // Add the default export to fix the import error
 export default function DoctorAIDiagnosis() {
   // State with localStorage persistence
@@ -459,7 +485,11 @@ export default function DoctorAIDiagnosis() {
   const [toast, setToast] = useState(null);
   
   // API availability check
-  const [isApiAvailable, setIsApiAvailable] = useState(null);
+  const [isApiAvailable, setIsApiAvailable] = useState({
+    xray: null,
+    mri: null,
+    symptoms: null
+  });
   
   // Animation settings
   const containerVariants = {
@@ -494,7 +524,7 @@ export default function DoctorAIDiagnosis() {
   const SYMPTOM_API_URL = 'http://127.0.0.1:8001'; // Original symptom analysis API
   const MRI_API_URL = 'http://127.0.0.1:8004'; // New brain MRI API
   
-  // Helper function to check if the API is available
+  // Helper function to check if an API is available
   const checkApiAvailability = async (apiUrl) => {
     try {
       const controller = new AbortController();
@@ -529,10 +559,21 @@ export default function DoctorAIDiagnosis() {
   // Check API availability on component mount
   useEffect(() => {
     const checkApis = async () => {
-      // For simplicity, just check the MRI API since that's the one we're focusing on
       const isMriApiAvailable = await checkApiAvailability(MRI_API_URL);
-      setIsApiAvailable(isMriApiAvailable);
-      console.log("MRI API availability:", isMriApiAvailable ? "API server is available" : "Using local mock data");
+      const isXrayApiAvailable = await checkApiAvailability(XRAY_API_URL);
+      const isSymptomApiAvailable = await checkApiAvailability(SYMPTOM_API_URL);
+      
+      setIsApiAvailable({
+        mri: isMriApiAvailable,
+        xray: isXrayApiAvailable,
+        symptoms: isSymptomApiAvailable
+      });
+      
+      console.log("API availability:", {
+        mri: isMriApiAvailable ? "API server is available" : "Using local mock data",
+        xray: isXrayApiAvailable ? "API server is available" : "Using local mock data",
+        symptoms: isSymptomApiAvailable ? "API server is available" : "Using local mock data"
+      });
     };
     
     checkApis();
@@ -630,7 +671,7 @@ export default function DoctorAIDiagnosis() {
   // Load heatmap image when heatmapResult changes
   useEffect(() => {
     const loadHeatmapImage = async () => {
-      if (activeTab === 'mri' && heatmapResult?.heatmap_url && isApiAvailable) {
+      if (activeTab === 'mri' && heatmapResult?.heatmap_url && isApiAvailable.mri) {
         setIsLoadingHeatmapImage(true);
         try {
           // For MRI analysis, we use the specific heatmap_url from the MRI API
@@ -642,11 +683,12 @@ export default function DoctorAIDiagnosis() {
         } finally {
           setIsLoadingHeatmapImage(false);
         }
-      } else if (activeTab === 'xray' && heatmapResult?.path && isApiAvailable) {
-        // Keep the original X-ray heatmap loading logic
+      } else if (activeTab === 'xray' && heatmapResult?.path && isApiAvailable.xray) {
+        // For X-ray heatmaps, construct the image URL correctly
         setIsLoadingHeatmapImage(true);
         try {
-          const imageUrl = `${XRAY_API_URL}/heatmaps/${encodeURIComponent(heatmapResult.path)}`;
+          // Use the images route for serving static files
+          const imageUrl = `${XRAY_API_URL}/images/xray/heatmap/${encodeURIComponent(heatmapResult.path)}`;
           setHeatmapImageUrl(imageUrl);
         } catch (err) {
           console.error("Error loading X-ray heatmap image:", err);
@@ -823,7 +865,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available - if it's not, we'll use mock data
-      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
+      const apiAvailable = isApiAvailable.xray;
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -977,7 +1019,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if the MRI API is available
-      const apiAvailable = await checkApiAvailability(MRI_API_URL);
+      const apiAvailable = isApiAvailable.mri;
       
       // If API is available, use it
       if (apiAvailable) {
@@ -1170,7 +1212,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available
-      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
+      const apiAvailable = isApiAvailable.xray;
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -1275,9 +1317,9 @@ export default function DoctorAIDiagnosis() {
         
         setHeatmapResult(heatmapData);
         
-        // Immediately set the heatmap image URL for X-ray using the original format
+        // Immediately set the heatmap image URL for X-ray using the images route
         if (heatmapData.path) {
-          const imageUrl = `${XRAY_API_URL}/heatmaps/${heatmapData.path}`;
+          const imageUrl = `${XRAY_API_URL}/images/xray/heatmap/${encodeURIComponent(heatmapData.path)}`;
           setHeatmapImageUrl(imageUrl);
         }
         
@@ -1374,7 +1416,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if the MRI API is available
-      const apiAvailable = await checkApiAvailability(MRI_API_URL);
+      const apiAvailable = isApiAvailable.mri;
       
       // If API is available, use it
       if (apiAvailable) {
@@ -1595,7 +1637,6 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Keep original X-ray heatmap generation function
   const handleGenerateXrayHeatmap = async () => {
     if (!xrayPreviewUrl) {
       setToast({
@@ -1614,7 +1655,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if API is available
-      const apiAvailable = await checkApiAvailability(XRAY_API_URL);
+      const apiAvailable = isApiAvailable.xray;
       
       // If API is available, use it regardless of whether we have a real file or just a preview URL
       if (apiAvailable) {
@@ -1663,7 +1704,8 @@ export default function DoctorAIDiagnosis() {
         
         // Immediately fetch and set the heatmap image URL for display
         if (data.path) {
-          const imageUrl = `${XRAY_API_URL}/heatmaps/${data.path}`;
+          // Use the images route for serving static files
+          const imageUrl = `${XRAY_API_URL}/images/xray/heatmap/${encodeURIComponent(data.path)}`;
           setHeatmapImageUrl(imageUrl);
         }
         
@@ -1735,7 +1777,7 @@ export default function DoctorAIDiagnosis() {
     
     try {
       // Check if the MRI API is available
-      const apiAvailable = await checkApiAvailability(MRI_API_URL);
+      const apiAvailable = isApiAvailable.mri;
       
       // If API is available, use it
       if (apiAvailable) {
@@ -1847,7 +1889,7 @@ export default function DoctorAIDiagnosis() {
       if (activeTab === 'mri') {
         // MRI heatmap download
         // Check if MRI API is available first
-        const apiAvailable = await checkApiAvailability(MRI_API_URL);
+        const apiAvailable = isApiAvailable.mri;
         
         // If API is available, use it
         if (apiAvailable && heatmapResult.heatmap_url) {
@@ -1892,13 +1934,13 @@ export default function DoctorAIDiagnosis() {
           });
         }
       } else {
-        // X-ray heatmap download - keep original logic
+        // X-ray heatmap download
         // Check if X-ray API is available first
-        const apiAvailable = await checkApiAvailability(XRAY_API_URL);
+        const apiAvailable = isApiAvailable.xray;
         
         // If API is available, use it
         if (apiAvailable && heatmapResult.path) {
-          // For X-ray, we use the original heatmap fetch logic
+          // For X-ray, use the download-heatmap endpoint
           const response = await fetch(`${XRAY_API_URL}/download-heatmap?filename=${encodeURIComponent(heatmapResult.path)}`);
           
           if (!response.ok) {
@@ -1953,17 +1995,17 @@ export default function DoctorAIDiagnosis() {
     }
   };
   
-  // Keep original symptom analysis logic
+  // Updated symptom analysis function to connect with the symptom analyzer API
   const handleSymptomAnalysis = async () => {
     setIsAnalyzing(true);
     setError(null);
     
     const startTime = Date.now();
-    const minimumWaitTime = 10000; // 10 seconds minimum wait for user experience
+    const minimumWaitTime = 5000; // 5 seconds minimum wait for user experience
     
     try {
-      // Check if API is available
-      const apiAvailable = await checkApiAvailability(SYMPTOM_API_URL);
+      // Check if symptom API is available
+      const apiAvailable = isApiAvailable.symptoms;
       
       // If API is available, use it
       if (apiAvailable) {
@@ -1992,8 +2034,21 @@ export default function DoctorAIDiagnosis() {
           await new Promise(resolve => setTimeout(resolve, minimumWaitTime - elapsedTime));
         }
         
+        // Process the API response - format based on the provided example
+        // The API returns predictions array with disease and score
+        const differentials = data.predictions.map(item => ({
+          condition: item.disease,
+          probability: item.score
+        }));
+        
         // Format the API response for display
-        setAnalysisResults(data);
+        const formattedResults = {
+          impression: "Based on the symptom profile, the following conditions should be considered:",
+          differentials: differentials,
+          recommendations: "Recommend further clinical evaluation and/or diagnostic testing to confirm the diagnosis. The patient's symptoms and medical history should be considered alongside these AI-generated probabilities."
+        };
+        
+        setAnalysisResults(formattedResults);
         
         setToast({
           type: 'success',
@@ -2004,20 +2059,37 @@ export default function DoctorAIDiagnosis() {
         // Wait at least the minimum time for user experience
         await new Promise(resolve => setTimeout(resolve, minimumWaitTime));
         
-        setAnalysisResults({
+        // Mock data with the same structure as the API response
+        const mockData = {
+          predictions: [
+            { disease: "Allergic Rhinitis", score: 0.5116 },
+            { disease: "Gastroenteritis", score: 0.2694 },
+            { disease: "Food Poisoning", score: 0.1054 },
+            { disease: "Influenza", score: 0.102 },
+            { disease: "Common Cold", score: 0.0114 },
+            { disease: "Bronchitis", score: 0.0001 },
+            { disease: "Pneumonia", score: 0.0 },
+            { disease: "Migraine", score: 0.0 },
+            { disease: "Urinary Tract Infection", score: 0.0 },
+            { disease: "COVID-19", score: 0.0 }
+          ]
+        };
+        
+        // Convert the mock data to the same format as our analysis results
+        const formattedResults = {
           impression: "Based on the symptom profile, the following conditions should be considered (demo mode):",
-          differentials: [
-            { condition: "Upper Respiratory Tract Infection", probability: 0.65 },
-            { condition: "Influenza", probability: 0.20 },
-            { condition: "COVID-19", probability: 0.10 },
-            { condition: "Allergic Rhinitis", probability: 0.05 }
-          ],
-          recommendations: "Recommend symptomatic treatment with rest, adequate hydration, and antipyretics as needed. Consider antigen testing for influenza and SARS-CoV-2. Follow up if symptoms worsen or persist beyond 7 days. Monitor for development of respiratory distress, high fever >102°F, or severe headache."
-        });
+          differentials: mockData.predictions.map(item => ({
+            condition: item.disease,
+            probability: item.score
+          })),
+          recommendations: "Recommend further clinical evaluation and/or diagnostic testing to confirm the diagnosis. The patient's symptoms and medical history should be considered alongside these AI-generated probabilities."
+        };
+        
+        setAnalysisResults(formattedResults);
         
         setToast({
           type: 'info',
-          message: 'Using demo data for symptom analysis.'
+          message: 'Server unavailable. Using demo data for symptom analysis.'
         });
       }
     } catch (err) {
@@ -2194,7 +2266,13 @@ export default function DoctorAIDiagnosis() {
     
     return (
       <>
-        <div className={`bg-gradient-to-r ${tabContent.gradientLight} p-5 sm:p-6 rounded-xl flex items-start ${tabContent.border} shadow-sm`}>
+        <div className={`bg-gradient-to-r ${tabContent.gradientLight} p-5 sm:p-6 rounded-xl flex items-start ${tabContent.border} shadow-sm relative`}>
+          {/* API Status Indicator - shows only for the active tab */}
+          <LiveApiIndicator 
+            isAvailable={isApiAvailable[activeTab]} 
+            type={activeTab} 
+          />
+        
           <div className={`p-2.5 rounded-lg mr-4 flex-shrink-0 ${tabContent.icon}`}>
             <FiInfo className="w-5 h-5" />
           </div>
@@ -2510,7 +2588,13 @@ export default function DoctorAIDiagnosis() {
     
     return (
       <div className="space-y-7">
-        <div className={`bg-gradient-to-r ${tabContent.gradientLight} p-5 sm:p-6 rounded-xl flex items-start ${tabContent.border} shadow-sm`}>
+        <div className={`bg-gradient-to-r ${tabContent.gradientLight} p-5 sm:p-6 rounded-xl flex items-start ${tabContent.border} shadow-sm relative`}>
+          {/* API Status Indicator for symptoms */}
+          <LiveApiIndicator 
+            isAvailable={isApiAvailable.symptoms} 
+            type="symptoms" 
+          />
+          
           <div className={`p-2.5 rounded-lg mr-4 flex-shrink-0 ${tabContent.icon}`}>
             <FiInfo className="w-5 h-5" />
           </div>
@@ -3063,7 +3147,7 @@ export default function DoctorAIDiagnosis() {
           {getAnalysisTitle()}
         </h2>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className={`grid grid-cols-1 ${activeTab === 'symptoms' ? 'lg:grid-cols-1' : 'lg:grid-cols-2'} gap-8`}>
           {/* Analysis Results Card */}
           <Card 
             className="overflow-hidden border border-indigo-100/70 dark:border-indigo-900/30 shadow-lg shadow-indigo-900/5"
@@ -3339,24 +3423,6 @@ export default function DoctorAIDiagnosis() {
             animate="visible"
             className="space-y-10"
           >
-            {/* API Status Indicator */}
-            {isApiAvailable !== null && (
-              <div className={`flex items-center rounded-lg px-4 py-2 text-sm ${
-                isApiAvailable 
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' 
-                  : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300'
-              }`}>
-                <div className={`w-3 h-3 rounded-full mr-2 ${
-                  isApiAvailable ? 'bg-green-500' : 'bg-amber-500'
-                }`}></div>
-                <span>
-                  {isApiAvailable 
-                    ? 'Server connected. Using live API for analysis.' 
-                    : 'Server unavailable. Using demo functionality.'}
-                </span>
-              </div>
-            )}
-            
             {/* Main Card */}
             <GlassCard className="p-7 sm:p-8 border-gray-100/70 dark:border-slate-700/50 shadow-xl shadow-indigo-900/5">
               {/* Tabs Navigation */}
