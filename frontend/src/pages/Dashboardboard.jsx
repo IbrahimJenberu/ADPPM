@@ -842,7 +842,7 @@ function Dashboard() {
         return [
           { icon: <MdDashboard className="w-5 h-5" />, text: 'Dashboard', path: '/dashboard/admin' },
           { icon: <FiUsers className="w-5 h-5" />, text: 'User Management', path: '/dashboard/admin/users' },
-          { icon: <FiBarChart2 className="w-5 h-5" />, text: "User Insights",       path: "/dashboard/admin/analytics" },
+          { icon: <FiBarChart2 className="w-5 h-5" />, text: "User Insights", path: "/dashboard/admin/analytics" },
         ];
       default:
         return [];
@@ -902,10 +902,18 @@ function Dashboard() {
     setIsChangingPassword(true);
     
     try {
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+      
       const response = await fetch('http://localhost:8022/users/me/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // Include the token in the authorization header
         },
         body: JSON.stringify(passwordData),
       });
@@ -1240,7 +1248,11 @@ function Dashboard() {
             whileHover={{ x: 3 }}
             whileTap={{ scale: 0.97 }}
             onClick={toggleDarkMode}
-            className={`flex items-center ${sidebarOpen ? 'justify-between' : 'justify-center'} w-full px-3 py-2.5 rounded-2xl text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/50 transition-all duration-200`}
+            className={`flex items-center ${sidebarOpen ? 'justify-between' : 'justify-center'} w-full px-3 py-2.5 rounded-2xl transition-all duration-200 ${
+              isDarkMode 
+                ? 'text-amber-400 hover:bg-slate-800/60' 
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700/50'
+            }`}
             aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
           >
             <div className="flex items-center">
