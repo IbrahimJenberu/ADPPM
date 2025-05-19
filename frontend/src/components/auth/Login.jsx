@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Toaster, toast } from 'react-hot-toast';
 
 // API configuration
-const API_BASE_URL = ''; // Empty string for relative URLs, or set to your base API URL if different
+const API_BASE_URL = 'http://localhost:8022'; // Empty string for relative URLs, or set to your base API URL if different
 
 // Password Reset Request Modal Component
 const PasswordResetModal = ({ isOpen, onClose, darkMode }) => {

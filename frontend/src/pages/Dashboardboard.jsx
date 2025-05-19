@@ -4,7 +4,7 @@ import { useNavigate, Routes, Route, Navigate, useLocation, Link } from 'react-r
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { FiMenu, FiBell, FiHome, FiActivity, FiClipboard, 
   FiFileText, FiLayers, FiCalendar, FiSearch, FiUsers, FiSettings, 
-  FiChevronRight, FiChevronDown, FiChevronsLeft, FiUser, FiCheck, FiX, FiInfo, FiSlack, FiBarChart2} from 'react-icons/fi';
+  FiChevronRight, FiChevronDown, FiChevronsLeft, FiUser, FiCheck, FiX, FiInfo, FiSlack, FiBarChart2, FiLock, FiEye, FiEyeOff} from 'react-icons/fi';
 import { HiOutlineUserAdd, HiOutlineDocumentReport, HiOutlineChartBar, HiOutlineClock } from 'react-icons/hi';
 import { MdOutlineBiotech, MdOutlineHealthAndSafety, MdDashboard, MdOutlineNightlight, MdOutlineLightMode, MdTimeline } from 'react-icons/md';
 import { RiMentalHealthLine, RiPulseLine, RiStethoscopeLine, RiHealthBookLine, RiLogoutCircleRLine, RiShieldUserLine } from 'react-icons/ri';
@@ -378,6 +378,255 @@ const PageTransition = ({ children }) => (
   </motion.div>
 );
 
+// Modal component for various dialogs
+const Modal = ({ isOpen, onClose, title, children }) => {
+  const modalRef = useRef(null);
+  
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    const handleClickOutside = (e) => {
+      if (modalRef.current && !modalRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    
+    if (isOpen) {
+      document.addEventListener('keydown', handleEsc);
+      document.addEventListener('mousedown', handleClickOutside);
+      // Prevent scrolling on body when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+    
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.removeEventListener('mousedown', handleClickOutside);
+      // Restore scrolling on body when modal is closed
+      document.body.style.overflow = 'auto';
+    };
+  }, [isOpen, onClose]);
+  
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          ref={modalRef}
+          className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md shadow-soft-lg border border-slate-200/50 dark:border-slate-700/30 overflow-hidden"
+        >
+          <div className="px-6 py-4 border-b border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-white font-satoshi">{title}</h3>
+            <button 
+              onClick={onClose}
+              className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors"
+            >
+              <FiX className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-6">
+            {children}
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// Password Change Form Component
+const ChangePasswordForm = ({ onSubmit, isLoading }) => {
+  const [formData, setFormData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error for this field when user starts typing again
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+  
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.currentPassword) {
+      newErrors.currentPassword = 'Current password is required';
+    }
+    
+    if (!formData.newPassword) {
+      newErrors.newPassword = 'New password is required';
+    } else if (formData.newPassword.length < 8) {
+      newErrors.newPassword = 'Password must be at least 8 characters';
+    }
+    
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your new password';
+    } else if (formData.newPassword !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    if (formData.currentPassword === formData.newPassword) {
+      newErrors.newPassword = 'New password must be different from current password';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (validateForm()) {
+      onSubmit({
+        current_password: formData.currentPassword,
+        new_password: formData.newPassword
+      });
+    }
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div>
+        <div className="mb-5">
+          <label htmlFor="currentPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 font-satoshi">
+            Current Password
+          </label>
+          <div className="relative">
+            <input
+              type={showCurrentPassword ? "text" : "password"}
+              id="currentPassword"
+              name="currentPassword"
+              value={formData.currentPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 rounded-xl bg-slate-100/70 dark:bg-slate-700/40 border ${
+                errors.currentPassword 
+                ? 'border-rose-500 dark:border-rose-500' 
+                : 'border-slate-200/70 dark:border-slate-700/70'
+              } focus:bg-white dark:focus:bg-slate-700 focus:border-sky-500 dark:focus:border-sky-500 
+              focus:ring-2 focus:ring-sky-500/20 dark:focus:ring-sky-500/20 focus:outline-none 
+              text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500
+              transition-all duration-200 font-inter text-base`}
+              placeholder="Your current password"
+            />
+            <button 
+              type="button" 
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+            >
+              {showCurrentPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+            </button>
+          </div>
+          {errors.currentPassword && (
+            <p className="mt-1.5 text-rose-500 text-sm font-inter">{errors.currentPassword}</p>
+          )}
+        </div>
+        
+        <div className="mb-5">
+          <label htmlFor="newPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 font-satoshi">
+            New Password
+          </label>
+          <div className="relative">
+            <input
+              type={showNewPassword ? "text" : "password"}
+              id="newPassword"
+              name="newPassword"
+              value={formData.newPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 rounded-xl bg-slate-100/70 dark:bg-slate-700/40 border ${
+                errors.newPassword 
+                ? 'border-rose-500 dark:border-rose-500' 
+                : 'border-slate-200/70 dark:border-slate-700/70'
+              } focus:bg-white dark:focus:bg-slate-700 focus:border-sky-500 dark:focus:border-sky-500 
+              focus:ring-2 focus:ring-sky-500/20 dark:focus:ring-sky-500/20 focus:outline-none 
+              text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500
+              transition-all duration-200 font-inter text-base`}
+              placeholder="Enter new password"
+            />
+            <button 
+              type="button" 
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              onClick={() => setShowNewPassword(!showNewPassword)}
+            >
+              {showNewPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+            </button>
+          </div>
+          {errors.newPassword && (
+            <p className="mt-1.5 text-rose-500 text-sm font-inter">{errors.newPassword}</p>
+          )}
+        </div>
+        
+        <div>
+          <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 font-satoshi">
+            Confirm New Password
+          </label>
+          <div className="relative">
+            <input
+              type={showConfirmPassword ? "text" : "password"}
+              id="confirmPassword"
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 rounded-xl bg-slate-100/70 dark:bg-slate-700/40 border ${
+                errors.confirmPassword 
+                ? 'border-rose-500 dark:border-rose-500' 
+                : 'border-slate-200/70 dark:border-slate-700/70'
+              } focus:bg-white dark:focus:bg-slate-700 focus:border-sky-500 dark:focus:border-sky-500 
+              focus:ring-2 focus:ring-sky-500/20 dark:focus:ring-sky-500/20 focus:outline-none 
+              text-slate-700 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500
+              transition-all duration-200 font-inter text-base`}
+              placeholder="Confirm new password"
+            />
+            <button 
+              type="button" 
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              {showConfirmPassword ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+            </button>
+          </div>
+          {errors.confirmPassword && (
+            <p className="mt-1.5 text-rose-500 text-sm font-inter">{errors.confirmPassword}</p>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex justify-end mt-6 space-x-3">
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-medium shadow-md hover:shadow-lg transition-all duration-200 focus:ring-2 focus:ring-sky-500/30 focus:outline-none font-satoshi flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {isLoading ? (
+            <>
+              <LoadingSpinner size="sm" className="mr-2" />
+              Updating...
+            </>
+          ) : (
+            'Update Password'
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};
+
 function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -402,6 +651,10 @@ function Dashboard() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const notificationsRef = useRef(null);
   const profileDropdownRef = useRef(null);
+  
+  // Change Password State
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Sample data for dashboard components
   const [activePatients] = useState([
@@ -642,6 +895,34 @@ function Dashboard() {
   const handleLogout = async (e) => {
     e.preventDefault();
     await logout();
+  };
+  
+  // Function to handle change password
+  const handleChangePassword = async (passwordData) => {
+    setIsChangingPassword(true);
+    
+    try {
+      const response = await fetch('http://localhost:8022/users/me/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(passwordData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to change password');
+      }
+      
+      // Show success message and close modal
+      addToast('Password Updated', 'Your password has been changed successfully.', 'success');
+      setShowChangePasswordModal(false);
+    } catch (error) {
+      addToast('Password Update Failed', error.message, 'error');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   return (
@@ -1255,6 +1536,19 @@ function Dashboard() {
                         </div>
                       </div>
                       
+                      <div className="p-2">
+                        <button 
+                          onClick={() => {
+                            setShowProfileDropdown(false);
+                            setShowChangePasswordModal(true);
+                          }}
+                          className="flex w-full items-center rounded-xl py-2.5 px-3 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/70 transition-all duration-200 font-satoshi"
+                        >
+                          <FiLock className="w-4 h-4 mr-2.5 text-slate-500 dark:text-slate-400" />
+                          Change Password
+                        </button>
+                      </div>
+                      
                       <div className="p-3 border-t border-slate-200/70 dark:border-slate-700/70 bg-slate-50/80 dark:bg-slate-900/50">
                         <button 
                           onClick={handleLogout}
@@ -1337,6 +1631,18 @@ function Dashboard() {
         </main>
       </div>
       
+      {/* Change Password Modal */}
+      <Modal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+        title="Change Password"
+      >
+        <ChangePasswordForm 
+          onSubmit={handleChangePassword}
+          isLoading={isChangingPassword}
+        />
+      </Modal>
+      
       {/* Background grid pattern via CSS */}
       <style>
         {`
@@ -1345,7 +1651,7 @@ function Dashboard() {
           }
 
           .dark .bg-grid-pattern {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%235D5CDE' fill-opacity='0.2'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%235D5CDE' fill-opacity='0.2'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15v-9H0v-1h15V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h9V0h1v15h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
           }
         `}
       </style>

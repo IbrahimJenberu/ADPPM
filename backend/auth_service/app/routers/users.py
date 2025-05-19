@@ -201,7 +201,7 @@ async def change_password(
         # Verify current password
         if not verify_password(password_data.current_password, current_user["password_hash"]):
             logger.warning(f"Invalid current password provided for user {current_user['id']}")
-            raise InvalidCredentialsException(detail="Current password is incorrect")
+            raise InvalidCredentialsException()
         
         # Check if new password is same as current (additional validation)
         if password_data.current_password == password_data.new_password:
@@ -213,18 +213,16 @@ async def change_password(
         # Hash the new password
         password_hash = get_password_hash(password_data.new_password)
         
-        # Use a transaction for atomicity
-        async with conn.transaction():
-            # Update password in database
-            success = await UserModel.update_password(conn, current_user["id"], password_hash)
-            
-            if not success:
-                logger.error(f"Failed to update password for user: {current_user['id']}")
-                raise ResourceNotFoundException("User")
-            
-            # Revoke all existing refresh tokens for security
-            revoked_count = await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
-            logger.info(f"Revoked {revoked_count} refresh tokens for user {current_user['id']}")
+        # Update password in database
+        success = await UserModel.update_password(conn, current_user["id"], password_hash)
+        
+        if not success:
+            logger.error(f"Failed to update password for user: {current_user['id']}")
+            raise ResourceNotFoundException("User")
+        
+        # Revoke all existing refresh tokens for security
+        revoked_count = await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
+        logger.info(f"Revoked {revoked_count} refresh tokens for user {current_user['id']}")
         
         logger.info(f"Password changed successfully for user {current_user['id']}")
         return {"message": "Password updated successfully"}

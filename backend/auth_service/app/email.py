@@ -1,9 +1,10 @@
+# auth_service/app/email.py
 """Email utilities for sending emails."""
 import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import asyncio
 from datetime import datetime
 
@@ -17,7 +18,7 @@ async def send_email_async(
     subject: str,
     html_content: str,
     plain_content: Optional[str] = None
-) -> bool:
+) -> Tuple[bool, Optional[str]]:
     """
     Send an email asynchronously.
     
@@ -28,30 +29,43 @@ async def send_email_async(
         plain_content: Plain text content of the email (optional)
         
     Returns:
-        True if email was sent successfully, False otherwise
+        Tuple containing (success_status, error_message)
     """
-    # If no SMTP settings configured, log and return
+    # Check SMTP configuration
+    if not settings.SMTP_SERVER or not settings.SMTP_PORT:
+        error_msg = "Email not sent: SMTP server or port not configured"
+        logger.error(error_msg)
+        return False, error_msg
+        
+    # Check SMTP credentials
     if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        logger.warning("Email not sent: SMTP credentials not configured")
-        return False
+        error_msg = "Email not sent: SMTP credentials not configured"
+        logger.warning(error_msg)
+        return False, error_msg
     
     # Run the email sending in a thread to not block asyncio
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, 
-        send_email_sync, 
-        recipients, 
-        subject, 
-        html_content, 
-        plain_content
-    )
+    try:
+        result, error_msg = await loop.run_in_executor(
+            None, 
+            send_email_sync, 
+            recipients, 
+            subject, 
+            html_content, 
+            plain_content
+        )
+        return result, error_msg
+    except Exception as e:
+        error_msg = f"Error sending email: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
 def send_email_sync(
     recipients: List[str],
     subject: str,
     html_content: str,
     plain_content: Optional[str] = None
-) -> bool:
+) -> Tuple[bool, Optional[str]]:
     """
     Send an email synchronously.
     
@@ -62,7 +76,7 @@ def send_email_sync(
         plain_content: Plain text content of the email (optional)
         
     Returns:
-        True if email was sent successfully, False otherwise
+        Tuple containing (success_status, error_message)
     """
     try:
         # Create message
@@ -88,13 +102,22 @@ def send_email_sync(
             server.send_message(message)
             
         logger.info(f"Email sent to {', '.join(recipients)}")
-        return True
+        return True, None
         
+    except smtplib.SMTPAuthenticationError:
+        error_msg = "SMTP authentication failed: Invalid credentials"
+        logger.error(error_msg)
+        return False, error_msg
+    except smtplib.SMTPConnectError:
+        error_msg = f"Failed to connect to SMTP server {settings.SMTP_SERVER}:{settings.SMTP_PORT}"
+        logger.error(error_msg)
+        return False, error_msg
     except Exception as e:
-        logger.error(f"Error sending email: {e}")
-        return False
+        error_msg = f"Error sending email: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
-async def send_password_reset_email(email: str, reset_token: str) -> bool:
+async def send_password_reset_email(email: str, reset_token: str) -> Tuple[bool, Optional[str]]:
     """
     Send a password reset email.
     
@@ -103,7 +126,7 @@ async def send_password_reset_email(email: str, reset_token: str) -> bool:
         reset_token: Password reset token
         
     Returns:
-        True if email was sent successfully, False otherwise
+        Tuple containing (success_status, error_message)
     """
     # Create reset link
     reset_link = f"https://adppm.com/reset-password?token={reset_token}"
@@ -126,7 +149,7 @@ async def send_password_reset_email(email: str, reset_token: str) -> bool:
     # Send email
     return await send_email_async([email], subject, html_content)
 
-async def send_welcome_email(email: str, username: str) -> bool:
+async def send_welcome_email(email: str, username: str) -> Tuple[bool, Optional[str]]:
     """
     Send a welcome email to a new user.
     
@@ -135,7 +158,7 @@ async def send_welcome_email(email: str, username: str) -> bool:
         username: User's username
         
     Returns:
-        True if email was sent successfully, False otherwise
+        Tuple containing (success_status, error_message)
     """
     subject = "Welcome to ADPPM"
     html_content = f"""
@@ -153,7 +176,7 @@ async def send_welcome_email(email: str, username: str) -> bool:
     # Send email
     return await send_email_async([email], subject, html_content)
 
-async def send_security_alert_email(email: str, client_info: dict) -> bool:
+async def send_security_alert_email(email: str, client_info: dict) -> Tuple[bool, Optional[str]]:
     """
     Send a security alert email when suspicious activity is detected.
     
@@ -162,7 +185,7 @@ async def send_security_alert_email(email: str, client_info: dict) -> bool:
         client_info: Information about the client (IP, user agent, etc.)
         
     Returns:
-        True if email was sent successfully, False otherwise
+        Tuple containing (success_status, error_message)
     """
     # Create email content
     subject = "ADPPM Security Alert - Unusual Account Activity"
