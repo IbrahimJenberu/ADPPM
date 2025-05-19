@@ -210,7 +210,6 @@ class UserModel:
             username,
         )
 
-# ... (previous model code remains the same)
 
     @classmethod
     async def update_user(cls, conn, user_id, **fields):
@@ -256,7 +255,7 @@ class UserModel:
     @staticmethod
     async def update_password(conn, user_id: str, password_hash: str) -> bool:
         """
-        Update user password.
+        Update user password with proper transaction handling.
 
         Args:
             conn: Database connection
@@ -266,22 +265,23 @@ class UserModel:
         Returns:
             True if successful, False otherwise
         """
-        # Update password and updated_at
-        updated_at = datetime.utcnow()
-        result = await conn.execute(
-            """
-            UPDATE users
-            SET password_hash = $2, updated_at = $3
-            WHERE id = $1 AND is_active = true
-        """,
-            user_id,
-            password_hash,
-            updated_at,
-        )
+        async with conn.transaction():
+            # Update password and updated_at
+            updated_at = datetime.utcnow()
+            result = await conn.execute(
+                """
+                UPDATE users
+                SET password_hash = $2, updated_at = $3
+                WHERE id = $1 AND is_active = true
+                """,
+                user_id,
+                password_hash,
+                updated_at,
+            )
 
-        # Parse rowcount from result (format: "UPDATE 1")
-        rowcount = int(result.split()[1])
-        return rowcount > 0
+            # Parse rowcount from result (format: "UPDATE 1")
+            rowcount = int(result.split()[1])
+            return rowcount > 0
 
     @staticmethod
     async def get_all_users(

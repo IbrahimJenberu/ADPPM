@@ -1028,7 +1028,7 @@ function Dashboard() {
       {/* Main Content */}
       <div className={`flex-1 flex flex-col overflow-hidden ${windowWidth < 768 && sidebarOpen ? 'ml-[290px]' : windowWidth < 768 && !sidebarOpen ? 'ml-[80px]' : ''}`}>
         {/* Header */}
-        <header className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/30 shadow-sm z-10 h-16 sticky top-0">
+        <header className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/30 shadow-sm z-20 h-16 sticky top-0">
           <div className="h-full px-4 md:px-6 flex items-center justify-between">
             <div className="flex items-center">
               {!sidebarOpen && (
@@ -1150,7 +1150,7 @@ function Dashboard() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      className="absolute right-0 mt-2 w-[300px] md:w-[360px] bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden z-20 border border-slate-200/70 dark:border-slate-700/70"
+                      className="absolute right-0 mt-2 w-[300px] md:w-[360px] bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden z-50 border border-slate-200/70 dark:border-slate-700/70"
                     >
                       <div className="p-4 border-b border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between">
                         <h3 className="font-semibold text-slate-800 dark:text-white flex items-center font-satoshi">
@@ -1198,7 +1198,7 @@ function Dashboard() {
               
               <div className="hidden md:block h-8 w-px bg-slate-200/70 dark:bg-slate-700/40"></div>
               
-              {/* Profile dropdown */}
+              {/* Profile dropdown trigger */}
               <div className="relative profile-dropdown-container" ref={profileDropdownRef}>
                 <motion.div 
                   whileHover={{ scale: 1.05 }}
@@ -1218,16 +1218,19 @@ function Dashboard() {
                   </div>
                   <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-800"></div>
                 </motion.div>
-                
-                <AnimatePresence>
-                  {showProfileDropdown && (
+              </div>
+              
+              {/* Profile dropdown portal - positioned fixed to avoid stacking context issues */}
+              <AnimatePresence>
+                {showProfileDropdown && (
+                  <div className="fixed inset-0 z-[9999] pointer-events-none">
+                    <div className="absolute inset-0 pointer-events-auto" onClick={() => setShowProfileDropdown(false)}></div>
                     <motion.div 
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                      style={{ zIndex: 99999 }} 
-                      className="absolute right-0 mt-2 w-56 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden border border-slate-200/70 dark:border-slate-700/70 z-[99999]"
+                      className="pointer-events-auto absolute right-4 top-16 w-56 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-soft-lg overflow-hidden border border-slate-200/70 dark:border-slate-700/70"
                     >
                       <div className="p-4 border-b border-slate-200/70 dark:border-slate-700/70">
                         <div className="flex items-center">
@@ -1262,9 +1265,9 @@ function Dashboard() {
                         </button>
                       </div>
                     </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                  </div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
@@ -1322,7 +1325,7 @@ function Dashboard() {
                 <>
                   <Route path="/admin" element={<PageTransition><AdminDashboard {...sharedProps} /></PageTransition>} />
                   <Route path="/admin/users" element={<PageTransition><UserManagement {...sharedProps} /></PageTransition>} />
-                  <Route path="/admin/analytics" element={<PageTransition><div>User Analytics</div></PageTransition>} />
+                  <Route path="/admin/analytics" element={<PageTransition><Analytics {...sharedProps} /></PageTransition>} />
                 </>
               )}
 

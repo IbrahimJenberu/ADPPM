@@ -88,19 +88,18 @@ async def get_current_user_profile(
     """
     Get current user profile.
     
-    Args:
-        current_user: Current user dict
-        
     Returns:
-        User profile
+        User profile info including id, email, full_name, department, role, is_active
     """
     async with route_analytics(request):
+        logger.info(f"User {current_user['id']} requested their profile")
         return current_user
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user_profile(
     request: Request,
     user_data: UserUpdate,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_active_user),
     conn: asyncpg.Connection = Depends(get_db_conn)
 ):
@@ -108,28 +107,64 @@ async def update_current_user_profile(
     Update current user profile.
     
     Args:
-        user_data: User update data
-        current_user: Current user dict
-        conn: Database connection
+        user_data: User update data with fields to update
         
     Returns:
         Updated user profile
         
     Raises:
         UserNotFoundException: If user not found
+        ResourceExistsException: If attempting to update email to one that already exists
     """
     async with route_analytics(request):
-        # Only update allowed fields
-        updated_user = await UserModel.update_user(
-            conn,
-            current_user["id"],
-            full_name=user_data.full_name if user_data.full_name is not None else None
-        )
+        logger.info(f"User {current_user['id']} is updating their profile")
         
-        if not updated_user:
-            raise UserNotFoundException()
+        # Convert Pydantic model to dict and exclude unset fields
+        update_data = user_data.dict(exclude_unset=True)
         
-        return updated_user
+        # Restrict which fields can be updated by regular users
+        allowed_fields = {"full_name", "department"}
+        update_data = {k: v for k, v in update_data.items() if k in allowed_fields}
+        
+        if not update_data:
+            logger.warning(f"No valid fields to update for user {current_user['id']}")
+            return current_user
+        
+        try:
+            # Update the user with only allowed fields
+            updated_user = await UserModel.update_user(
+                conn, 
+                current_user["id"],
+                **update_data
+            )
+            
+            if not updated_user:
+                logger.error(f"Failed to update user {current_user['id']}")
+                raise UserNotFoundException()
+            
+            # Prepare data for syncing to other services
+            sync_data = {
+                "id": str(updated_user["id"]),
+                "email": updated_user["email"],
+                "full_name": updated_user["full_name"],
+                "role": updated_user["role"],
+                "department": updated_user.get("department"),
+                "is_active": updated_user["is_active"]
+            }
+            
+            # Add background sync tasks
+            background_tasks.add_task(sync_user_to_doctor_service, sync_data)
+            background_tasks.add_task(sync_user_to_labroom_service, sync_data)
+            
+            logger.info(f"User {current_user['id']} profile updated successfully")
+            return updated_user
+            
+        except ResourceExistsException as e:
+            logger.error(f"Profile update failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e)
+            )
 
 @router.post("/me/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
@@ -142,30 +177,42 @@ async def change_password(
     Change current user's password.
     
     Args:
-        password_data: Password change data
-        current_user: Current user dict
-        conn: Database connection
+        password_data: Password change request with current_password and new_password
         
     Returns:
-        Status message
+        Success message
         
     Raises:
         InvalidCredentialsException: If current password is incorrect
+        ResourceNotFoundException: If user not found
+        HTTPException: If new password doesn't meet requirements
     """
     async with route_analytics(request):
+        logger.info(f"User {current_user['id']} is attempting to change password")
+        
         # Verify current password
         if not verify_password(password_data.current_password, current_user["password_hash"]):
-            raise InvalidCredentialsException()
+            logger.warning(f"Invalid current password provided for user {current_user['id']}")
+            raise InvalidCredentialsException(detail="Current password is incorrect")
         
-        # Update password
+        # Password validation is handled by Pydantic validator in ChangePasswordRequest schema
+        
+        # Hash the new password
         password_hash = get_password_hash(password_data.new_password)
+        
+        # Update password in database
         success = await UserModel.update_password(conn, current_user["id"], password_hash)
         
         if not success:
             logger.error(f"Failed to update password for user: {current_user['id']}")
             raise ResourceNotFoundException("User")
         
+        # Revoke all existing refresh tokens for security
+        await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
+        
+        logger.info(f"Password changed successfully for user {current_user['id']}")
         return {"message": "Password updated successfully"}
+
 
 @router.get("", response_model=UserList)
 async def get_users(

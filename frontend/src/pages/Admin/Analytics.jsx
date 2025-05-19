@@ -37,6 +37,29 @@ function Analytics() {
     limit: 100
   });
   
+  // Pagination state for history
+  const [historyPagination, setHistoryPagination] = useState({
+    page: 1,
+    size: 10,
+    total: 0,
+    pages: 1
+  });
+  
+  // Dark mode detection
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  
+  useEffect(() => {
+    // Check if dark mode is enabled
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setIsDarkMode(true);
+    }
+    
+    // Listen for changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+      setIsDarkMode(event.matches);
+    });
+  }, []);
+  
   // Refs
   const autoRefreshTimerRef = useRef(null);
   const refreshButtonRef = useRef(null);
@@ -49,10 +72,10 @@ function Analytics() {
       setAnalyticsSummary(response.data);
       setLastRefreshTime(new Date());
       if (refreshButtonRef.current) {
-        refreshButtonRef.current.classList.add('animate-wiggle');
+        refreshButtonRef.current.classList.add('animate-pulse');
         setTimeout(() => {
           if (refreshButtonRef.current) {
-            refreshButtonRef.current.classList.remove('animate-wiggle');
+            refreshButtonRef.current.classList.remove('animate-pulse');
           }
         }, 1000);
       }
@@ -73,8 +96,8 @@ function Analytics() {
       setRouteAnalytics(response.data);
       setLastRefreshTime(new Date());
     } catch (error) {
-      setAnalyticsError('Failed to fetch route analytics: ' + (error.response?.data?.detail || error.message));
-      showToast('Failed to fetch route analytics', 'error');
+      setAnalyticsError('Failed to fetch endpoint analytics: ' + (error.response?.data?.detail || error.message));
+      showToast('Failed to fetch endpoint analytics', 'error');
     } finally {
       if (showLoadingState) setAnalyticsLoading(false);
     }
@@ -89,8 +112,8 @@ function Analytics() {
       setPopularRoutes(response.data);
       setLastRefreshTime(new Date());
     } catch (error) {
-      setAnalyticsError('Failed to fetch popular routes: ' + (error.response?.data?.detail || error.message));
-      showToast('Failed to fetch popular routes', 'error');
+      setAnalyticsError('Failed to fetch popular endpoints: ' + (error.response?.data?.detail || error.message));
+      showToast('Failed to fetch popular endpoints', 'error');
     } finally {
       if (showLoadingState) setAnalyticsLoading(false);
     }
@@ -126,11 +149,12 @@ function Analytics() {
     }
   }, [authClient]);
 
-  const fetchHistoryData = useCallback(async (filters = {}, showLoadingState = true) => {
+  const fetchHistoryData = useCallback(async (filters = {}, page = 1, showLoadingState = true) => {
     try {
       if (showLoadingState) setAnalyticsLoading(true);
       const params = {
         limit: filters.limit || 100,
+        skip: (page - 1) * (filters.limit || 100), // Add pagination offset
         ...(filters.user_id && { user_id: filters.user_id }),
         ...(filters.route && { route: filters.route }),
         ...(filters.start_time && { start_time: filters.start_time.toISOString() }),
@@ -138,11 +162,30 @@ function Analytics() {
       };
       
       const response = await authClient.get('/analytics/history', { params });
-      setHistoryData(response.data);
+      
+      // Handle both response formats (array or paginated object)
+      if (Array.isArray(response.data)) {
+        setHistoryData(response.data);
+        setHistoryPagination({
+          page: page,
+          size: filters.limit || 100,
+          total: response.data.length,
+          pages: 1
+        });
+      } else {
+        setHistoryData(response.data.items || response.data);
+        setHistoryPagination({
+          page: page,
+          size: filters.limit || 100,
+          total: response.data.total || response.data.items?.length || 0,
+          pages: Math.ceil((response.data.total || response.data.items?.length || 0) / (filters.limit || 100))
+        });
+      }
+      
       setLastRefreshTime(new Date());
     } catch (error) {
-      setAnalyticsError('Failed to fetch history data: ' + (error.response?.data?.detail || error.message));
-      showToast('Failed to fetch history data', 'error');
+      setAnalyticsError('Failed to fetch request history: ' + (error.response?.data?.detail || error.message));
+      showToast('Failed to fetch request history', 'error');
     } finally {
       if (showLoadingState) setAnalyticsLoading(false);
     }
@@ -161,7 +204,7 @@ function Analytics() {
       fetchRouteAnalytics(null, false);
       fetchPopularRoutes(10, false);
     } else if (analyticsSubTab === 'history') {
-      fetchHistoryData(historyFilters, false);
+      fetchHistoryData(historyFilters, historyPagination.page, false);
     } else if (analyticsSubTab === 'reports') {
       fetchAnalyticsSummary(false);
       fetchRouteAnalytics(null, false);
@@ -178,7 +221,8 @@ function Analytics() {
     analyticsSubTab, 
     analyticsTimePeriod, 
     selectedUserId, 
-    historyFilters, 
+    historyFilters,
+    historyPagination.page,
     fetchAnalyticsSummary, 
     fetchPopularRoutes, 
     fetchTimeBasedStats, 
@@ -198,7 +242,7 @@ function Analytics() {
       fetchRouteAnalytics();
       fetchPopularRoutes();
     } else if (analyticsSubTab === 'history') {
-      fetchHistoryData(historyFilters);
+      fetchHistoryData(historyFilters, historyPagination.page);
     } else if (analyticsSubTab === 'reports') {
       fetchAnalyticsSummary();
       fetchRouteAnalytics();
@@ -212,7 +256,8 @@ function Analytics() {
     fetchRouteAnalytics, 
     fetchHistoryData, 
     analyticsTimePeriod, 
-    historyFilters
+    historyFilters,
+    historyPagination.page
   ]);
 
   // Refresh time-based stats when period changes
@@ -232,7 +277,8 @@ function Analytics() {
   // Fetch history data when history filters change
   useEffect(() => {
     if (analyticsSubTab === 'history') {
-      fetchHistoryData(historyFilters);
+      // Reset to page 1 when filters change
+      fetchHistoryData(historyFilters, 1);
     }
   }, [analyticsSubTab, historyFilters, fetchHistoryData]);
 
@@ -271,9 +317,9 @@ function Analytics() {
       pauseOnHover: true,
       draggable: true,
       progress: undefined,
-      className: type === 'success' ? 'bg-green-50 text-green-800 border-l-4 border-green-500' : 
-                type === 'error' ? 'bg-red-50 text-red-800 border-l-4 border-red-500' : 
-                'bg-blue-50 text-blue-800 border-l-4 border-blue-500',
+      className: type === 'success' ? 'bg-teal-50 text-teal-800 border-l-4 border-teal-500 dark:bg-teal-900/40 dark:text-teal-200 dark:border-teal-500' : 
+                 type === 'error' ? 'bg-rose-50 text-rose-800 border-l-4 border-rose-500 dark:bg-rose-900/40 dark:text-rose-200 dark:border-rose-500' : 
+                 'bg-blue-50 text-blue-800 border-l-4 border-blue-500 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-500',
     });
   };
   
@@ -283,6 +329,13 @@ function Analytics() {
       ...prev,
       [name]: value
     }));
+  };
+  
+  // Handle page change for history pagination
+  const handleHistoryPageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= historyPagination.pages) {
+      fetchHistoryData(historyFilters, newPage);
+    }
   };
   
   // Clear history filters
@@ -372,17 +425,17 @@ function Analytics() {
   const getMethodBadgeStyle = (method) => {
     switch (method?.toUpperCase()) {
       case 'GET':
-        return 'bg-blue-100 text-blue-700';
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 ring-1 ring-blue-500/20';
       case 'POST':
-        return 'bg-green-100 text-green-700';
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 ring-1 ring-emerald-500/20';
       case 'PUT':
-        return 'bg-amber-100 text-amber-700';
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-500/20';
       case 'DELETE':
-        return 'bg-red-100 text-red-700';
+        return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 ring-1 ring-rose-500/20';
       case 'PATCH':
-        return 'bg-purple-100 text-purple-700';
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 ring-1 ring-purple-500/20';
       default:
-        return 'bg-gray-100 text-gray-700';
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 ring-1 ring-gray-500/20';
     }
   };
 
@@ -404,15 +457,15 @@ function Analytics() {
 
   // Get color class based on performance
   const getPerformanceColorClass = (value, benchmark, inverse = false) => {
-    if (value === undefined || value === null) return 'text-gray-500';
+    if (value === undefined || value === null) return 'text-gray-500 dark:text-gray-400';
     
-    // For metrics where lower is better (like bounce rate), use inverse
+    // For metrics where lower is better (like response time), use inverse
     if (inverse) {
-      return value <= benchmark ? 'text-green-600' : 'text-red-600';
+      return value <= benchmark ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400';
     }
     
     // For metrics where higher is better
-    return value >= benchmark ? 'text-green-600' : 'text-red-600';
+    return value >= benchmark ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400';
   };
   
   // Process time-based data for charts
@@ -420,20 +473,26 @@ function Analytics() {
     if (!data || !data.time_data) return { labels: [], datasets: [] };
     
     const labels = data.time_data.map(item => item.period);
+    
+    // Medical-appropriate colors
+    const teal = isDarkMode ? 'rgba(20, 184, 166, 0.8)' : 'rgba(20, 184, 166, 1)';
+    const tealLight = isDarkMode ? 'rgba(20, 184, 166, 0.2)' : 'rgba(20, 184, 166, 0.3)';
+    const purple = isDarkMode ? 'rgba(139, 92, 246, 0.8)' : 'rgba(139, 92, 246, 1)';
+    
     const datasets = [
       {
-        label: 'Visitors',
+        label: 'Unique Visitors',
         data: data.time_data.map(item => item.visitors),
-        borderColor: 'rgba(79, 70, 229, 1)',
-        backgroundColor: 'rgba(79, 70, 229, 0.2)',
+        borderColor: teal,
+        backgroundColor: tealLight,
         tension: 0.4,
         fill: true
       },
       {
-        label: 'Page Views',
+        label: 'Total Requests',
         data: data.time_data.map(item => item.pageviews),
-        borderColor: 'rgba(16, 185, 129, 1)',
-        backgroundColor: 'rgba(16, 185, 129, 0.0)',
+        borderColor: purple,
+        backgroundColor: 'rgba(0, 0, 0, 0)',
         tension: 0.4
       }
     ];
@@ -448,22 +507,41 @@ function Analytics() {
     // Take top 5 routes
     const topRoutes = routes.slice(0, 5);
     
+    // Convert technical API routes to user-friendly names
     const labels = topRoutes.map(route => {
-      // Shorten route name if too long
       const path = route.route || route.path || '/';
+      // Map API routes to user-friendly names
+      if (path.includes('/users')) return 'User Management';
+      if (path.includes('/auth')) return 'Authentication';
+      if (path.includes('/patients')) return 'Patient Records';
+      if (path.includes('/appointments')) return 'Appointments';
+      if (path.includes('/lab')) return 'Lab Results';
+      if (path.includes('/billing')) return 'Billing';
+      if (path.includes('/prescriptions')) return 'Prescriptions';
+      if (path.includes('/analytics')) return 'Analytics';
+      
+      // Default case - shorten if needed
       return path.length > 25 ? path.substring(0, 22) + '...' : path;
     });
     
     const data = topRoutes.map(route => route.count || route.visits || 0);
     
-    // Generate colors
-    const backgroundColors = [
-      'rgba(79, 70, 229, 0.8)',
-      'rgba(16, 185, 129, 0.8)',
-      'rgba(245, 158, 11, 0.8)',
-      'rgba(99, 102, 241, 0.8)',
-      'rgba(236, 72, 153, 0.8)'
-    ];
+    // Generate colors - medical-themed
+    const backgroundColors = isDarkMode 
+      ? [
+          'rgba(20, 184, 166, 0.8)', // teal
+          'rgba(56, 189, 248, 0.8)', // sky
+          'rgba(139, 92, 246, 0.8)', // violet
+          'rgba(236, 72, 153, 0.8)', // pink
+          'rgba(59, 130, 246, 0.8)', // blue
+        ]
+      : [
+          'rgba(20, 184, 166, 0.8)', // teal
+          'rgba(56, 189, 248, 0.7)', // sky
+          'rgba(139, 92, 246, 0.7)', // violet
+          'rgba(236, 72, 153, 0.7)', // pink
+          'rgba(59, 130, 246, 0.7)', // blue
+        ];
     
     return {
       labels,
@@ -472,7 +550,7 @@ function Analytics() {
           data,
           backgroundColor: backgroundColors,
           borderWidth: 1,
-          borderColor: '#ffffff'
+          borderColor: isDarkMode ? '#1f2937' : '#ffffff'
         }
       ]
     };
@@ -487,9 +565,10 @@ function Analytics() {
       {
         label: 'Actions',
         data: data.activity_by_day.map(item => item.actions),
-        backgroundColor: 'rgba(79, 70, 229, 0.8)',
-        borderColor: 'rgba(79, 70, 229, 1)',
-        borderWidth: 1
+        backgroundColor: isDarkMode ? 'rgba(20, 184, 166, 0.7)' : 'rgba(20, 184, 166, 0.8)',
+        borderColor: isDarkMode ? 'rgba(20, 184, 166, 0.9)' : 'rgba(20, 184, 166, 1)',
+        borderWidth: 1,
+        borderRadius: 4
       }
     ];
     
@@ -502,18 +581,18 @@ function Analytics() {
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[...Array(4)].map((_, index) => (
-          <div key={index} className="bg-gray-200 rounded-xl h-32"></div>
+          <div key={index} className="bg-gray-200 dark:bg-gray-700 rounded-xl h-32"></div>
         ))}
       </div>
       
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-200 rounded-xl h-80"></div>
-        <div className="bg-gray-200 rounded-xl h-80"></div>
+        <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-80"></div>
+        <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-80"></div>
       </div>
       
       {/* Table */}
-      <div className="bg-gray-200 rounded-xl h-64"></div>
+      <div className="bg-gray-200 dark:bg-gray-700 rounded-xl h-64"></div>
     </div>
   );
   
@@ -558,9 +637,39 @@ function Analytics() {
     
     return `${minutes}m ${remainingSeconds}s`;
   };
+  
+  // User-friendly endpoint names
+  const getEndpointName = (route) => {
+    if (!route) return 'Unknown Endpoint';
+    
+    if (route.includes('/users')) return 'User Management';
+    if (route.includes('/auth/login')) return 'User Login';
+    if (route.includes('/auth/logout')) return 'User Logout';
+    if (route.includes('/auth')) return 'Authentication';
+    if (route.includes('/patients/search')) return 'Patient Search';
+    if (route.includes('/patients')) return 'Patient Records';
+    if (route.includes('/appointments/schedule')) return 'Appointment Scheduling';
+    if (route.includes('/appointments/cancel')) return 'Appointment Cancellation';
+    if (route.includes('/appointments')) return 'Appointments';
+    if (route.includes('/lab/results')) return 'Lab Results';
+    if (route.includes('/lab')) return 'Laboratory';
+    if (route.includes('/billing/payment')) return 'Payment Processing';
+    if (route.includes('/billing/invoice')) return 'Invoice Generation';
+    if (route.includes('/billing')) return 'Billing';
+    if (route.includes('/prescriptions/refill')) return 'Prescription Refill';
+    if (route.includes('/prescriptions')) return 'Prescriptions';
+    if (route.includes('/analytics')) return 'Analytics';
+    if (route.includes('/dashboard')) return 'Dashboard';
+    if (route.includes('/profile')) return 'User Profile';
+    if (route.includes('/settings')) return 'System Settings';
+    if (route.includes('/messages')) return 'Messaging';
+    if (route.includes('/notifications')) return 'Notifications';
+    
+    return route; // Default fallback if no match
+  };
 
   return (
-    <div className="bg-gradient-to-b from-gray-50 to-white rounded-xl shadow-sm p-6 space-y-6">
+    <div className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900 rounded-xl shadow-sm dark:shadow-gray-800/10 p-6 space-y-6">
       {/* Toast Container for notifications */}
       <ToastContainer
         position="top-right"
@@ -575,27 +684,27 @@ function Analytics() {
       />
       
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-gray-100">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-gray-100 dark:border-gray-800">
         <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">
-            Analytics Dashboard
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-teal-600 to-sky-600 bg-clip-text text-transparent">
+            User Management Analytics
           </h1>
-          <p className="text-gray-500 mt-1">
-            Track system usage, performance, and user activity
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            Track susyem users, system usage, patient engagement, and platform performance
           </p>
         </div>
       </div>
       
       {/* Analytics Tabs + Auto Refresh Controls */}
       <div className="flex flex-col md:flex-row justify-between gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="flex overflow-x-auto">
             <button
               onClick={() => setAnalyticsSubTab('dashboard')}
               className={`px-6 py-4 text-sm font-medium whitespace-nowrap ${
                 analyticsSubTab === 'dashboard'
-                  ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50 bg-opacity-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-500 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 bg-opacity-50'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
               } transition-colors focus:outline-none`}
               aria-current={analyticsSubTab === 'dashboard' ? 'page' : undefined}
             >
@@ -605,30 +714,30 @@ function Analytics() {
               onClick={() => setAnalyticsSubTab('routes')}
               className={`px-6 py-4 text-sm font-medium whitespace-nowrap ${
                 analyticsSubTab === 'routes'
-                  ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50 bg-opacity-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-500 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 bg-opacity-50'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
               } transition-colors focus:outline-none`}
               aria-current={analyticsSubTab === 'routes' ? 'page' : undefined}
             >
-              Routes
+              Endpoints
             </button>
             <button
               onClick={() => setAnalyticsSubTab('history')}
               className={`px-6 py-4 text-sm font-medium whitespace-nowrap ${
                 analyticsSubTab === 'history'
-                  ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50 bg-opacity-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-500 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 bg-opacity-50'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
               } transition-colors focus:outline-none`}
               aria-current={analyticsSubTab === 'history' ? 'page' : undefined}
             >
-              History
+              Activity Log
             </button>
             <button
               onClick={() => setAnalyticsSubTab('reports')}
               className={`px-6 py-4 text-sm font-medium whitespace-nowrap ${
                 analyticsSubTab === 'reports'
-                  ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50 bg-opacity-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-teal-600 dark:text-teal-400 border-b-2 border-teal-500 dark:border-teal-400 bg-teal-50 dark:bg-teal-900/20 bg-opacity-50'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
               } transition-colors focus:outline-none`}
               aria-current={analyticsSubTab === 'reports' ? 'page' : undefined}
             >
@@ -636,31 +745,33 @@ function Analytics() {
             </button>
           </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex items-center gap-2">
-              <button 
+              <motion.button 
                 ref={refreshButtonRef}
                 onClick={refreshAnalyticsData}
-                className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                className="p-2 bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/40 transition-colors"
                 disabled={analyticsLoading}
                 aria-label="Refresh data"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${analyticsLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-              </button>
-              <div className="text-xs text-gray-500">
+              </motion.button>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
                 Updated: {getTimeSinceRefresh()}
               </div>
             </div>
-            <div className="bg-gray-100 rounded-lg p-1 flex items-center">
+            <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-1 flex items-center">
               <button
                 onClick={() => changeAutoRefreshInterval(5)}
                 className={`px-2 py-1 text-xs font-medium rounded ${
                   autoRefreshEnabled && autoRefreshInterval === 5
-                    ? 'bg-white text-indigo-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' 
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                 }`}
                 aria-pressed={autoRefreshEnabled && autoRefreshInterval === 5}
               >
@@ -670,8 +781,8 @@ function Analytics() {
                 onClick={() => changeAutoRefreshInterval(15)}
                 className={`px-2 py-1 text-xs font-medium rounded ${
                   autoRefreshEnabled && autoRefreshInterval === 15
-                    ? 'bg-white text-indigo-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' 
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                 }`}
                 aria-pressed={autoRefreshEnabled && autoRefreshInterval === 15}
               >
@@ -681,8 +792,8 @@ function Analytics() {
                 onClick={() => changeAutoRefreshInterval(30)}
                 className={`px-2 py-1 text-xs font-medium rounded ${
                   autoRefreshEnabled && autoRefreshInterval === 30
-                    ? 'bg-white text-indigo-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' 
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                 }`}
                 aria-pressed={autoRefreshEnabled && autoRefreshInterval === 30}
               >
@@ -692,8 +803,8 @@ function Analytics() {
                 onClick={() => changeAutoRefreshInterval(60)}
                 className={`px-2 py-1 text-xs font-medium rounded ${
                   autoRefreshEnabled && autoRefreshInterval === 60
-                    ? 'bg-white text-indigo-600 shadow-sm' 
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-white dark:bg-gray-600 text-teal-600 dark:text-teal-400 shadow-sm' 
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                 }`}
                 aria-pressed={autoRefreshEnabled && autoRefreshInterval === 60}
               >
@@ -709,8 +820,8 @@ function Analytics() {
                   onChange={toggleAutoRefresh}
                   aria-label="Toggle auto refresh"
                 />
-                <div className={`relative w-11 h-6 ${autoRefreshEnabled ? 'bg-indigo-600' : 'bg-gray-200'} rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
-                <span className="ml-2 text-sm font-medium text-gray-900">Auto-refresh</span>
+                <div className={`relative w-11 h-6 ${autoRefreshEnabled ? 'bg-teal-600 dark:bg-teal-500' : 'bg-gray-200 dark:bg-gray-700'} rounded-full peer peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all`}></div>
+                <span className="ml-2 text-sm font-medium text-gray-900 dark:text-gray-300">Auto-refresh</span>
               </label>
             </div>
           </div>
@@ -718,17 +829,17 @@ function Analytics() {
       </div>
       
       {/* Analytics Tools Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="p-5">
           <div className="flex flex-col md:flex-row gap-5">
             {/* Time period selector */}
             <div className="min-w-[200px]">
-              <label htmlFor="timePeriod" className="block text-xs font-medium text-gray-700 mb-1.5">
+              <label htmlFor="timePeriod" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 Time Period
               </label>
               <select
                 id="timePeriod"
-                className="block w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all duration-200 text-base"
+                className="block w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-teal-600 dark:focus:border-teal-500 transition-all duration-200 text-base"
                 value={analyticsTimePeriod}
                 onChange={(e) => setAnalyticsTimePeriod(e.target.value)}
               >
@@ -741,16 +852,16 @@ function Analytics() {
             {/* User selector (if viewing user-specific analytics) */}
             {selectedUserId && (
               <div className="flex-grow">
-                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   Selected User
                 </label>
                 <div className="flex items-center">
-                  <div className="bg-indigo-100 text-indigo-800 rounded-lg px-3 py-2 font-medium text-sm flex-grow">
+                  <div className="bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 rounded-lg px-3 py-2 font-medium text-sm flex-grow">
                     {selectedUserId}
                   </div>
                   <button
                     onClick={() => setSelectedUserId(null)}
-                    className="ml-2 text-gray-500 hover:text-gray-700 p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                    className="ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
                     type="button"
                     aria-label="Clear selected user"
                   >
@@ -766,25 +877,25 @@ function Analytics() {
             {analyticsSubTab === 'history' && (
               <div className="flex-grow grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="historyRoute" className="block text-xs font-medium text-gray-700 mb-1.5">
-                    Route Path
+                  <label htmlFor="historyRoute" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    System Module
                   </label>
                   <input
                     id="historyRoute"
                     type="text"
-                    className="block w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all duration-200 text-base"
-                    placeholder="/api/users"
+                    className="block w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-teal-600 dark:focus:border-teal-500 transition-all duration-200 text-base"
+                    placeholder="Appointments, Patients, etc."
                     value={historyFilters.route}
                     onChange={(e) => handleHistoryFilterChange('route', e.target.value)}
                   />
                 </div>
                 <div>
-                  <label htmlFor="historyLimit" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="historyLimit" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     Results Limit
                   </label>
                   <select
                     id="historyLimit"
-                    className="block w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all duration-200 text-base"
+                    className="block w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-teal-600 dark:focus:border-teal-500 transition-all duration-200 text-base"
                     value={historyFilters.limit}
                     onChange={(e) => handleHistoryFilterChange('limit', parseInt(e.target.value))}
                   >
@@ -796,13 +907,13 @@ function Analytics() {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="historyStartDate" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="historyStartDate" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     Start Date
                   </label>
                   <input
                     id="historyStartDate"
                     type="date"
-                    className="block w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all duration-200 text-base"
+                    className="block w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-teal-600 dark:focus:border-teal-500 transition-all duration-200 text-base"
                     value={historyFilters.start_time ? new Date(historyFilters.start_time).toISOString().split('T')[0] : ''}
                     onChange={(e) => {
                       const date = e.target.value ? new Date(e.target.value) : null;
@@ -811,13 +922,13 @@ function Analytics() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="historyEndDate" className="block text-xs font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="historyEndDate" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                     End Date
                   </label>
                   <input
                     id="historyEndDate"
                     type="date"
-                    className="block w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg shadow-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 transition-all duration-200 text-base"
+                    className="block w-full py-2.5 px-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm focus:bg-white dark:focus:bg-gray-700 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 dark:focus:ring-teal-600 dark:focus:border-teal-500 transition-all duration-200 text-base"
                     value={historyFilters.end_time ? new Date(historyFilters.end_time).toISOString().split('T')[0] : ''}
                     onChange={(e) => {
                       const date = e.target.value ? new Date(e.target.value) : null;
@@ -826,13 +937,15 @@ function Analytics() {
                   />
                 </div>
                 <div className="sm:col-span-2 flex justify-end">
-                  <button
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={clearHistoryFilters}
-                    className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
+                    className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors text-sm font-medium"
                     type="button"
                   >
-                    Clear Filters
-                  </button>
+                    Reset Filters
+                  </motion.button>
                 </div>
               </div>
             )}
@@ -844,20 +957,33 @@ function Analytics() {
       {analyticsLoading && !analyticsSummary ? (
         <AnalyticsSkeletonLoader />
       ) : analyticsError ? (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+        <div className="bg-rose-50 dark:bg-rose-900/20 border-l-4 border-rose-500 p-6 rounded-lg">
           <div className="flex">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <svg className="h-6 w-6 text-rose-400 dark:text-rose-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-red-800">
+              <p className="text-sm font-medium text-rose-800 dark:text-rose-200">
                 {analyticsError}
               </p>
-              <p className="mt-2 text-sm text-red-700">
+              <p className="mt-2 text-sm text-rose-700 dark:text-rose-300">
                 Please check your connection and try again later.
               </p>
+              <div className="mt-4">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={refreshAnalyticsData}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-rose-500 dark:bg-rose-700 dark:hover:bg-rose-600"
+                >
+                  <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Retry Now
+                </motion.button>
+              </div>
             </div>
           </div>
         </div>
@@ -877,20 +1003,20 @@ function Analytics() {
               {selectedUserId ? (
                 <div className="space-y-6">
                   {/* User Analytics Header */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div>
-                        <h2 className="text-xl font-bold text-gray-900">
-                          User Activity Analysis
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                          Provider Activity Analysis
                         </h2>
-                        <p className="text-gray-500 mt-1">
-                          Detailed analytics for selected user over time
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                          Detailed analytics for selected provider over time
                         </p>
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">Last updated:</span>
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Last updated:</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-200">
                           {formatDate(userAnalytics?.last_updated || new Date().toISOString())}
                         </span>
                       </div>
@@ -901,125 +1027,125 @@ function Analytics() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* Total Logins */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-blue-50 text-blue-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Total Logins</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">System Logins</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {formatNumber(userAnalytics?.total_logins || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${userAnalytics?.login_change?.positive ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${userAnalytics?.login_change?.positive ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {userAnalytics?.login_change?.positive ? '↑' : '↓'} {userAnalytics?.login_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous {analyticsTimePeriod}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous {analyticsTimePeriod}</span>
                         </div>
                       </div>
                     </motion.div>
                     
                     {/* Active Days */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-indigo-50 text-indigo-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Active Days</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Workdays</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {userAnalytics?.active_days || 0}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${(userAnalytics?.active_days_change?.positive) ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${(userAnalytics?.active_days_change?.positive) ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {(userAnalytics?.active_days_change?.positive) ? '↑' : '↓'} {userAnalytics?.active_days_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous {analyticsTimePeriod}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous {analyticsTimePeriod}</span>
                         </div>
                       </div>
                     </motion.div>
                     
                     {/* Actions Performed */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-amber-50 text-amber-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Actions Performed</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">System Actions</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {formatNumber(userAnalytics?.total_actions || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${(userAnalytics?.actions_change?.positive) ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${(userAnalytics?.actions_change?.positive) ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {(userAnalytics?.actions_change?.positive) ? '↑' : '↓'} {userAnalytics?.actions_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous {analyticsTimePeriod}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous {analyticsTimePeriod}</span>
                         </div>
                       </div>
                     </motion.div>
                     
                     {/* Average Session Time */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 text-emerald-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Avg. Session Time</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg. Session Duration</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {userAnalytics?.avg_session_time || '0m 0s'}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${(userAnalytics?.session_time_change?.positive) ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${(userAnalytics?.session_time_change?.positive) ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {(userAnalytics?.session_time_change?.positive) ? '↑' : '↓'} {userAnalytics?.session_time_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous {analyticsTimePeriod}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous {analyticsTimePeriod}</span>
                         </div>
                       </div>
                     </motion.div>
                   </div>
                   
                   {/* User Activity Chart */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      User Activity Over Time
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Provider Activity Trends
                     </h3>
                     <div className="h-80">
                       {userAnalytics?.activity_by_day ? (
@@ -1031,23 +1157,52 @@ function Analytics() {
                             plugins: {
                               legend: {
                                 position: 'top',
+                                labels: {
+                                  color: isDarkMode ? '#e5e7eb' : '#111827'
+                                }
                               },
                               title: {
                                 display: false,
                               },
+                              tooltip: {
+                                backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                                titleColor: isDarkMode ? '#f3f4f6' : '#111827',
+                                bodyColor: isDarkMode ? '#e5e7eb' : '#374151',
+                                borderColor: isDarkMode ? 'rgba(75, 85, 99, 0.2)' : 'rgba(203, 213, 225, 1)',
+                                borderWidth: 1,
+                                padding: 12,
+                                boxPadding: 6,
+                                usePointStyle: true,
+                                boxWidth: 8
+                              }
                             },
                             scales: {
                               y: {
                                 beginAtZero: true,
+                                grid: {
+                                  color: isDarkMode ? 'rgba(75, 85, 99, 0.2)' : 'rgba(226, 232, 240, 0.5)',
+                                  borderColor: isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 1)'
+                                },
+                                ticks: {
+                                  color: isDarkMode ? '#e5e7eb' : '#4b5563'
+                                },
                                 title: {
                                   display: true,
-                                  text: 'Actions'
+                                  text: 'Actions',
+                                  color: isDarkMode ? '#e5e7eb' : '#4b5563'
                                 }
                               },
                               x: {
+                                grid: {
+                                  display: false
+                                },
+                                ticks: {
+                                  color: isDarkMode ? '#e5e7eb' : '#4b5563'
+                                },
                                 title: {
                                   display: true,
-                                  text: 'Date'
+                                  text: 'Date',
+                                  color: isDarkMode ? '#e5e7eb' : '#4b5563'
                                 }
                               }
                             }
@@ -1055,7 +1210,7 @@ function Analytics() {
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full">
-                          <p className="text-gray-500">No activity data available</p>
+                          <p className="text-gray-500 dark:text-gray-400">No activity data available</p>
                         </div>
                       )}
                     </div>
@@ -1064,43 +1219,47 @@ function Analytics() {
                   {/* User Activity Details */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Most Visited Routes */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                      <div className="border-b border-gray-100 px-6 py-4">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          Most Accessed Routes
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                      <div className="border-b border-gray-100 dark:border-gray-700 px-6 py-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          Most Used System Modules
                         </h3>
                       </div>
                       <div className="p-4">
                         {userAnalytics?.top_routes?.length ? (
-                          <ul className="divide-y divide-gray-100">
+                          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
                             {userAnalytics.top_routes.map((route, index) => (
                               <li key={index} className="py-3 flex items-center justify-between">
                                 <div className="flex items-center">
-                                  <span className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-medium text-sm">
+                                  <span className="flex-shrink-0 w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-700 dark:text-teal-400 font-medium text-sm">
                                     {index + 1}
                                   </span>
-                                  <span className="ml-3 text-sm font-medium text-gray-900">
-                                    {route.path || route.route || '/'}
+                                  <span className="ml-3 text-sm font-medium text-gray-900 dark:text-white">
+                                    {getEndpointName(route.path || route.route || '/')}
                                   </span>
                                 </div>
-                                <div className="text-sm text-gray-500">
-                                  {formatNumber(route.visits || route.count || 0)} visits
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {formatNumber(route.visits || route.count || 0)} requests
                                 </div>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <div className="text-center py-4 text-gray-500">
-                            No route activity data available
+                          <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <p className="font-medium">No module usage data available</p>
+                            <p className="text-sm mt-1 max-w-xs mx-auto">Data will appear here once this provider starts using system modules</p>
                           </div>
                         )}
                       </div>
                     </div>
                     
                     {/* Activity Timeline */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                      <div className="border-b border-gray-100 px-6 py-4">
-                        <h3 className="text-lg font-semibold text-gray-900">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                      <div className="border-b border-gray-100 dark:border-gray-700 px-6 py-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                           Recent Activity
                         </h3>
                       </div>
@@ -1112,26 +1271,28 @@ function Analytics() {
                                 <li key={activityIdx}>
                                   <div className="relative pb-8">
                                     {activityIdx !== userAnalytics.recent_activity.length - 1 ? (
-                                      <span className="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                                      <span className="absolute top-5 left-5 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></span>
                                     ) : null}
                                     <div className="relative flex items-start space-x-3">
                                       <div className="relative">
-                                        <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center ring-8 ring-white">
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                                        <div className="h-10 w-10 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center ring-8 ring-white dark:ring-gray-800">
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                           </svg>
                                         </div>
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <div>
-                                          <div className="text-sm font-medium text-gray-900">
-                                            {activity.action || 'Unknown activity'}
+                                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {activity.action ? (
+                                              activity.action.charAt(0).toUpperCase() + activity.action.slice(1).toLowerCase()
+                                            ) : 'Unknown activity'}
                                           </div>
-                                          <p className="mt-0.5 text-sm text-gray-500">
-                                            {activity.path || activity.route || '/'}
+                                          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                                            {getEndpointName(activity.path || activity.route || '/')}
                                           </p>
                                         </div>
-                                        <div className="mt-2 text-sm text-gray-500">
+                                        <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                                           <p>
                                             {formatDate(activity.timestamp) || 'Unknown time'}
                                           </p>
@@ -1144,8 +1305,12 @@ function Analytics() {
                             </ul>
                           </div>
                         ) : (
-                          <div className="text-center py-4 text-gray-500">
-                            No recent activity data available
+                          <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p className="font-medium">No recent activity available</p>
+                            <p className="text-sm mt-1 max-w-xs mx-auto">Recent activities will appear here as they occur</p>
                           </div>
                         )}
                       </div>
@@ -1155,20 +1320,20 @@ function Analytics() {
               ) : (
                 <div className="space-y-6">
                   {/* General Analytics Header */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div>
-                        <h2 className="text-xl font-bold text-gray-900">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                           System Analytics Overview
                         </h2>
-                        <p className="text-gray-500 mt-1">
-                          Key performance indicators and usage statistics
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                          Key performance indicators and healthcare platform usage
                         </p>
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">Last updated:</span>
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Last updated:</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-200">
                           {formatDate(analyticsSummary?.report_generated_at || new Date().toISOString())}
                         </span>
                       </div>
@@ -1179,57 +1344,56 @@ function Analytics() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* Active Users */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-indigo-50 text-indigo-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Active Users</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Providers</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {formatNumber(analyticsSummary?.unique_users || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${parseAnalyticsData(analyticsSummary)?.user_change?.positive ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${parseAnalyticsData(analyticsSummary)?.user_change?.positive ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {parseAnalyticsData(analyticsSummary)?.user_change?.positive ? '↑' : '↓'} {parseAnalyticsData(analyticsSummary)?.user_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous {analyticsTimePeriod}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous {analyticsTimePeriod}</span>
                         </div>
                       </div>
                     </motion.div>
                     
-                    {/* Total Visits */}
+                    {/* Total Requests */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-blue-50 text-blue-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Total Requests</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Transactions</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {formatNumber(analyticsSummary?.total_requests || 0)}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className="text-sm text-gray-500">Last 24h:</span>
-                          <span className="text-sm font-medium text-gray-900 ml-1">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Last 24h:</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-200 ml-1">
                             {formatNumber(analyticsSummary?.requests_24h || 0)}
                           </span>
                         </div>
@@ -1238,55 +1402,55 @@ function Analytics() {
                     
                     {/* Average Response Time */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 text-emerald-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Avg. Response Time</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">System Response</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {formatTime(analyticsSummary?.avg_response_time) || '0ms'}
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className={`text-sm ${parseAnalyticsData(analyticsSummary)?.session_change?.positive ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`text-sm ${parseAnalyticsData(analyticsSummary)?.session_change?.positive ? 'text-teal-600 dark:text-teal-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {parseAnalyticsData(analyticsSummary)?.session_change?.positive ? '↑' : '↓'} {parseAnalyticsData(analyticsSummary)?.session_change?.value || 0}%
                           </span>
-                          <span className="text-sm text-gray-500 ml-1">vs. previous period</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">vs. previous period</span>
                         </div>
                       </div>
                     </motion.div>
                     
-                    {/* Busiest Hour */}
+                    {/* Peak Hours */}
                     <motion.div 
-                      whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                      whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                       transition={{ duration: 0.2 }}
-                      className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                     >
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 p-3 rounded-xl bg-amber-50 text-amber-700">
+                        <div className="flex-shrink-0 p-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                         </div>
                         <div className="ml-5">
-                          <p className="text-sm font-medium text-gray-500">Busiest Hour</p>
-                          <p className="mt-1 text-2xl font-bold text-gray-900">
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Peak Activity</p>
+                          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                             {analyticsSummary?.busiest_hour || '12'}:00
                           </p>
                         </div>
                       </div>
                       <div className="mt-3">
                         <div className="flex items-center">
-                          <span className="text-sm text-gray-500">Most active hour of the day</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Busiest hour of the day</span>
                         </div>
                       </div>
                     </motion.div>
@@ -1295,9 +1459,9 @@ function Analytics() {
                   {/* Charts */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">                   
                     {/* Route Distribution Pie Chart */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        Top Routes Distribution
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        Module Usage Distribution
                       </h3>
                       <div className="h-80">
                         {analyticsSummary?.top_routes?.length ? (
@@ -1310,11 +1474,27 @@ function Analytics() {
                                 plugins: {
                                   legend: {
                                     position: 'right',
+                                    labels: {
+                                      color: isDarkMode ? '#e5e7eb' : '#111827',
+                                      padding: 16,
+                                      boxWidth: 20,
+                                      font: {
+                                        size: 12
+                                      }
+                                    }
                                   },
                                   title: {
                                     display: false,
                                   },
                                   tooltip: {
+                                    backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                                    titleColor: isDarkMode ? '#f3f4f6' : '#111827',
+                                    bodyColor: isDarkMode ? '#e5e7eb' : '#374151',
+                                    borderColor: isDarkMode ? 'rgba(75, 85, 99, 0.2)' : 'rgba(203, 213, 225, 1)',
+                                    borderWidth: 1,
+                                    padding: 12,
+                                    boxPadding: 6,
+                                    usePointStyle: true,
                                     callbacks: {
                                       label: function(context) {
                                         const label = context.label || '';
@@ -1331,70 +1511,160 @@ function Analytics() {
                           </div>
                         ) : (
                           <div className="flex items-center justify-center h-full">
-                            <p className="text-gray-500">No route data available</p>
+                            <div className="text-center text-gray-500 dark:text-gray-400">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                              </svg>
+                              <p className="font-medium">No module data available</p>
+                              <p className="text-sm mt-1">Data will appear when the system is used</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Line Chart for Time-Based Data */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        System Activity Trends
+                      </h3>
+                      <div className="h-80">
+                        {timeBasedStats?.time_data?.length ? (
+                          <Line 
+                            data={processTimeData(timeBasedStats)}
+                            options={{
+                              responsive: true,
+                              maintainAspectRatio: false,
+                              plugins: {
+                                tooltip: {
+                                  backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.9)',
+                                  titleColor: isDarkMode ? '#f3f4f6' : '#111827',
+                                  bodyColor: isDarkMode ? '#e5e7eb' : '#374151',
+                                  borderColor: isDarkMode ? 'rgba(75, 85, 99, 0.2)' : 'rgba(203, 213, 225, 1)',
+                                  borderWidth: 1,
+                                  padding: 12,
+                                  boxPadding: 6,
+                                  usePointStyle: true,
+                                },
+                                legend: {
+                                  position: 'top',
+                                  labels: {
+                                    color: isDarkMode ? '#e5e7eb' : '#111827',
+                                    usePointStyle: true,
+                                    padding: 16,
+                                    boxWidth: 8
+                                  }
+                                },
+                              },
+                              scales: {
+                                y: {
+                                  beginAtZero: true,
+                                  grid: {
+                                    color: isDarkMode ? 'rgba(75, 85, 99, 0.2)' : 'rgba(226, 232, 240, 0.5)',
+                                    borderColor: isDarkMode ? 'rgba(75, 85, 99, 0.5)' : 'rgba(203, 213, 225, 1)'
+                                  },
+                                  ticks: {
+                                    color: isDarkMode ? '#e5e7eb' : '#4b5563'
+                                  }
+                                },
+                                x: {
+                                  grid: {
+                                    color: isDarkMode ? 'rgba(75, 85, 99, 0.1)' : 'rgba(226, 232, 240, 0.3)',
+                                    display: false
+                                  },
+                                  ticks: {
+                                    color: isDarkMode ? '#e5e7eb' : '#4b5563'
+                                  }
+                                }
+                              },
+                              elements: {
+                                line: {
+                                  tension: 0.4
+                                },
+                                point: {
+                                  radius: 3,
+                                  hoverRadius: 5
+                                }
+                              },
+                              interaction: {
+                                mode: 'index',
+                                intersect: false
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <div className="text-center text-gray-500 dark:text-gray-400">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                              </svg>
+                              <p className="font-medium">No trend data available</p>
+                              <p className="text-sm mt-1">Activity trends will appear over time</p>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
                   
-                  {/* Popular Routes Table */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="border-b border-gray-100 px-6 py-4 flex justify-between items-center">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Most Popular Routes
+                  {/* Popular Modules Table */}
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="border-b border-gray-100 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Most Used System Modules
                       </h3>
-                      <span className="text-sm text-gray-500">
-                        Total requests: {formatNumber(analyticsSummary?.total_requests || 0)}
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        Total transactions: {formatNumber(analyticsSummary?.total_requests || 0)}
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead className="bg-gray-50 dark:bg-gray-800/50">
                           <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Rank
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Route Path
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              System Module
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Requests
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Transactions
                             </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Percentage
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                           {analyticsSummary?.top_routes && analyticsSummary.top_routes.length > 0 ? (
                             analyticsSummary.top_routes.map((route, index) => {
                               const percentage = ((route.count / analyticsSummary.total_requests) * 100).toFixed(1);
                               return (
-                                <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
-                                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-medium">
+                                      <div className="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center text-teal-700 dark:text-teal-400 font-medium">
                                         {index + 1}
                                       </div>
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">
-                                      {route.route || '/'}
+                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                      {getEndpointName(route.route || '/')}
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
                                       {formatNumber(route.count || 0)}
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">
+                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
                                       {percentage}%
                                     </div>
-                                    <div className="w-32 h-2 bg-gray-200 rounded-full mt-2">
-                                      <div className="h-full bg-indigo-600 rounded-full" style={{width: `${percentage}%`}}></div>
+                                    <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full mt-2 overflow-hidden">
+                                      <div className="h-full bg-teal-600 dark:bg-teal-500 rounded-full" style={{width: `${percentage}%`}}></div>
                                     </div>
                                   </td>
                                 </tr>
@@ -1402,13 +1672,13 @@ function Analytics() {
                             })
                           ) : (
                             <tr>
-                              <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                              <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                                 <div className="flex flex-col items-center">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
-                                  <p className="text-lg font-medium">No route data available</p>
-                                  <p className="text-sm mt-1">Check back after users have interacted with the system</p>
+                                  <p className="text-lg font-medium mb-1">No module usage data available</p>
+                                  <p className="text-sm max-w-md">Usage statistics will appear here as providers interact with different system modules</p>
                                 </div>
                               </td>
                             </tr>
@@ -1422,7 +1692,7 @@ function Analytics() {
             </motion.div>
           )}
           
-          {/* ROUTES TAB */}
+          {/* ENDPOINTS TAB */}
           {analyticsSubTab === 'routes' && (
             <motion.div
               key="routes-tab"
@@ -1433,14 +1703,14 @@ function Analytics() {
               className="space-y-6"
             >
               {/* Routes Analytics Header */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Route Analytics
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      System Module Performance
                     </h2>
-                    <p className="text-gray-500 mt-1">
-                      Insights into API route usage and performance
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
+                      Detailed insights into module access and response times
                     </p>
                   </div>
                 </div>
@@ -1450,27 +1720,27 @@ function Analytics() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Total Routes */}
                 <motion.div 
-                  whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                  whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                   transition={{ duration: 0.2 }}
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                 >
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 p-3 rounded-xl bg-indigo-50 text-indigo-700">
+                    <div className="flex-shrink-0 p-3 rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                       </svg>
                     </div>
                     <div className="ml-5">
-                      <p className="text-sm font-medium text-gray-500">Unique Routes</p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Active Modules</p>
+                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                         {formatNumber(analyticsSummary?.top_routes?.length || 0)}
                       </p>
                     </div>
                   </div>
                   <div className="mt-3">
                     <div className="flex items-center">
-                      <span className="text-sm text-gray-500">
-                        Most accessed endpoints
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        System functional areas
                       </span>
                     </div>
                   </div>
@@ -1478,27 +1748,27 @@ function Analytics() {
                 
                 {/* Total Requests */}
                 <motion.div 
-                  whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                  whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                   transition={{ duration: 0.2 }}
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                 >
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 p-3 rounded-xl bg-blue-50 text-blue-700">
+                    <div className="flex-shrink-0 p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-400">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                       </svg>
                     </div>
                     <div className="ml-5">
-                      <p className="text-sm font-medium text-gray-500">Total Requests</p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Transactions</p>
+                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                         {formatNumber(analyticsSummary?.total_requests || 0)}
                       </p>
                     </div>
                   </div>
                   <div className="mt-3">
                     <div className="flex items-center">
-                      <span className="text-sm text-gray-500">Last 24h: </span>
-                      <span className="text-sm font-medium text-gray-900 ml-1">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Last 24h: </span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-200 ml-1">
                         {formatNumber(analyticsSummary?.requests_24h || 0)}
                       </span>
                     </div>
@@ -1507,103 +1777,103 @@ function Analytics() {
                 
                 {/* Average Response Time */}
                 <motion.div 
-                  whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                  whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                   transition={{ duration: 0.2 }}
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                 >
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 text-emerald-700">
+                    <div className="flex-shrink-0 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
                     <div className="ml-5">
-                      <p className="text-sm font-medium text-gray-500">Avg. Response Time</p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Avg. Response Time</p>
+                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                         {formatTime(analyticsSummary?.avg_response_time) || '0ms'}
                       </p>
                     </div>
                   </div>
                   <div className="mt-3">
                     <div className="flex items-center">
-                      <span className="text-sm text-gray-500">Average processing time</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">System processing time</span>
                     </div>
                   </div>
                 </motion.div>
                 
                 {/* Busiest Hour */}
                 <motion.div 
-                  whileHover={{ y: -4, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                  whileHover={{ y: -4, boxShadow: isDarkMode ? "0 10px 15px -3px rgba(0, 0, 0, 0.3)" : "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
                   transition={{ duration: 0.2 }}
-                  className="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
                 >
                   <div className="flex items-center">
-                    <div className="flex-shrink-0 p-3 rounded-xl bg-amber-50 text-amber-700">
+                    <div className="flex-shrink-0 p-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
                     <div className="ml-5">
-                      <p className="text-sm font-medium text-gray-500">Busiest Hour</p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Peak Activity</p>
+                      <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
                         {analyticsSummary?.busiest_hour || '7'}:00
                       </p>
                     </div>
                   </div>
                   <div className="mt-3">
                     <div className="flex items-center">
-                      <span className="text-sm text-gray-500">Peak traffic hour</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Highest system load</span>
                     </div>
                   </div>
                 </motion.div>
               </div>
               
-              {/* Routes Table */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="border-b border-gray-100 px-6 py-4 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    API Routes Performance
+              {/* Module Performance Table */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="border-b border-gray-100 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Module Performance Analysis
                   </h3>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Route Path
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          System Module
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Requests
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Total Accesses
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          % of Total
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          % of Activity
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {analyticsSummary?.top_routes && analyticsSummary.top_routes.length > 0 ? (
                         analyticsSummary.top_routes.map((route, index) => {
                           const percentage = ((route.count / analyticsSummary.total_requests) * 100).toFixed(1);
                           return (
-                            <tr key={index} className="hover:bg-gray-50 transition-colors">
+                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {route.route || '/'}
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                  {getEndpointName(route.route || '/')}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">
                                   {formatNumber(route.count || 0)}
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center">
-                                  <span className="text-sm font-medium text-gray-900 w-12">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white w-12">
                                     {percentage}%
                                   </span>
-                                  <div className="w-32 h-2 bg-gray-200 rounded-full ml-2">
+                                  <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full ml-2 overflow-hidden">
                                     <div 
-                                      className="h-full bg-indigo-600 rounded-full" 
+                                      className="h-full bg-teal-600 dark:bg-teal-500 rounded-full" 
                                       style={{ width: `${percentage}%` }}
                                     ></div>
                                   </div>
@@ -1614,13 +1884,13 @@ function Analytics() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                          <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             <div className="flex flex-col items-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                               </svg>
-                              <p className="text-lg font-medium">No route data available</p>
-                              <p className="text-sm mt-1">Routes will appear as they are accessed by users</p>
+                              <p className="text-lg font-medium mb-1">No module data available</p>
+                              <p className="text-sm max-w-md">Module usage statistics will appear here as providers interact with the system</p>
                             </div>
                           </td>
                         </tr>
@@ -1632,7 +1902,7 @@ function Analytics() {
             </motion.div>
           )}
           
-          {/* HISTORY TAB */}
+          {/* ACTIVITY LOG TAB */}
           {analyticsSubTab === 'history' && (
             <motion.div
               key="history-tab"
@@ -1643,114 +1913,114 @@ function Analytics() {
               className="space-y-6"
             >
               {/* History Header */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
-                      Route Access History
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      System Activity Log
                     </h2>
-                    <p className="text-gray-500 mt-1">
-                      Detailed log of all route access events
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
+                      Detailed history of all transactions and system interactions
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Showing</span>
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Showing</span>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300">
                       {historyData?.length || 0} entries
                     </span>
                   </div>
                 </div>
               </div>
               
-              {/* History Table */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              {/* Activity Log Table */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-800/50">
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Timestamp
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          User
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Provider
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Method
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Action
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Route
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Module
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Status
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Duration
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                       {historyData && historyData.length > 0 ? (
                         historyData.map((entry, index) => (
-                          <tr key={index} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                               {formatDate(entry.timestamp)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center">
-                                <div className="h-8 w-8 flex-shrink-0 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm flex items-center justify-center">
+                                <div className="h-8 w-8 flex-shrink-0 rounded-full bg-gradient-to-br from-teal-400 to-sky-400 dark:from-teal-600 dark:to-sky-600 text-white border border-teal-200 dark:border-teal-500/20 shadow-sm flex items-center justify-center">
                                   <span className="font-medium text-xs">
                                     {entry.user_name ? entry.user_name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}
                                   </span>
                                 </div>
                                 <div className="ml-3">
-                                  <div className="text-sm font-medium text-gray-900">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-white">
                                     {entry.user_name || 'Unknown user'}
                                   </div>
-                                  <div className="text-xs text-gray-500">
-                                    {entry.user_id || 'No ID'}
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {entry.user_id ? `ID: ${entry.user_id.substring(0, 8)}...` : 'No ID'}
                                   </div>
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getMethodBadgeStyle(entry.method)}`}>
-                                {entry.method || 'GET'}
+                                {entry.method ? entry.method.toUpperCase() : 'VIEW'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {entry.route || '/'}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                              {getEndpointName(entry.route || '/')}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               {entry.status_code ? (
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                                   entry.status_code >= 200 && entry.status_code < 300
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 ring-1 ring-emerald-500/20'
                                     : entry.status_code >= 300 && entry.status_code < 400
-                                    ? 'bg-blue-100 text-blue-800'
+                                    ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300 ring-1 ring-sky-500/20'
                                     : entry.status_code >= 400 && entry.status_code < 500
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-red-100 text-red-800'
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-500/20'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 ring-1 ring-rose-500/20'
                                 }`}>
                                   {entry.status_code}
                                 </span>
                               ) : (
-                                <span className="text-sm text-gray-500">N/A</span>
+                                <span className="text-sm text-gray-500 dark:text-gray-400">N/A</span>
                               )}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                               {entry.duration ? `${entry.duration}ms` : 'N/A'}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                          <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                             <div className="flex flex-col items-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300 dark:text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              <p className="text-lg font-medium">No history data available</p>
-                              <p className="text-sm mt-1">Route access history will appear here as routes are accessed</p>
+                              <p className="text-lg font-medium mb-1">No activity log data available</p>
+                              <p className="text-sm max-w-md">System activity logs will appear here as providers interact with the system</p>
                             </div>
                           </td>
                         </tr>
@@ -1759,6 +2029,74 @@ function Analytics() {
                   </table>
                 </div>
               </div>
+
+              {/* Pagination for History/Activity Log */}
+              {historyData && historyData.length > 0 && (
+                <div className="flex items-center justify-between bg-white dark:bg-gray-800 px-6 py-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Showing <span className="font-medium">{(historyPagination.page - 1) * historyPagination.size + 1}</span> to{' '}
+                        <span className="font-medium">{Math.min(historyPagination.page * historyPagination.size, historyPagination.total)}</span> of{' '}
+                        <span className="font-medium">{historyPagination.total}</span> results
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                        <motion.button
+                          whileHover={{ scale: 1.05, backgroundColor: "#F9FAFB", color: "#374151" }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleHistoryPageChange(historyPagination.page - 1)}
+                          disabled={historyPagination.page === 1}
+                          className="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          type="button"
+                          aria-label="Previous page"
+                        >
+                          <span className="sr-only">Previous</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </motion.button>
+                        
+                        {/* Show page numbers */}
+                        {[...Array(historyPagination.pages)].map((_, i) => (
+                          <motion.button
+                            key={i}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleHistoryPageChange(i + 1)}
+                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                              historyPagination.page === i + 1
+                                ? 'z-10 bg-teal-50 dark:bg-teal-900/20 border-teal-500 dark:border-teal-500/40 text-teal-600 dark:text-teal-400'
+                                : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            } transition-colors`}
+                            type="button"
+                            aria-label={`Page ${i + 1}`}
+                            aria-current={historyPagination.page === i + 1 ? 'page' : undefined}
+                          >
+                            {i + 1}
+                          </motion.button>
+                        ))}
+                        
+                        <motion.button
+                          whileHover={{ scale: 1.05, backgroundColor: "#F9FAFB", color: "#374151" }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleHistoryPageChange(historyPagination.page + 1)}
+                          disabled={historyPagination.page === historyPagination.pages}
+                          className="relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          type="button"
+                          aria-label="Next page"
+                        >
+                          <span className="sr-only">Next</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </motion.button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
           
@@ -1773,86 +2111,87 @@ function Analytics() {
               className="space-y-6"
             >
               {/* Reports Header */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                       Analytics Reports
                     </h2>
-                    <p className="text-gray-500 mt-1">
-                      Comprehensive reports and performance insights
+                    <p className="text-gray-500 dark:text-gray-400 mt-1">
+                      Comprehensive performance insights and usage trends
                     </p>
                   </div>
                   <div className="flex items-center">
-                    <a 
-                      href="#" 
+                    <motion.button 
+                      whileHover={{ scale: 1.02, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)" }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={(e) => {
                         e.preventDefault(); 
                         refreshAnalyticsData();
                         showToast("Analytics data refreshed", "success");
                       }}
-                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-teal-600 to-sky-600 hover:from-teal-700 hover:to-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-200"
                     >
                       <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                       Refresh Data
-                    </a>
+                    </motion.button>
                   </div>
                 </div>
               </div>
               
               {/* Performance Scorecard */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="border-b border-gray-100 px-6 py-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="border-b border-gray-100 dark:border-gray-700 px-6 py-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                     System Performance Scorecard
                   </h3>
                 </div>
                 <div className="p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* User Engagement */}
-                    <div className="bg-gray-50 rounded-lg p-5">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-4">User Engagement</h4>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Provider Engagement</h4>
                       <div className="space-y-4">
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Active Users</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Active Providers</span>
                             <span className={`text-xs font-medium ${getPerformanceColorClass(analyticsSummary?.unique_users, 10)}`}>
                               {formatNumber(analyticsSummary?.unique_users || 0)}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full bg-gray-200 rounded overflow-hidden">
+                          <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-indigo-600 rounded" 
+                              className="h-full bg-teal-600 dark:bg-teal-500 rounded-full" 
                               style={{ width: `${Math.min(((analyticsSummary?.unique_users || 0) / 20) * 100, 100)}%` }}
                             ></div>
                           </div>
                         </div>
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Avg. Response Time</span>
-                            <span className={`text-xs font-medium ${getPerformanceColorClass(analyticsSummary?.avg_response_time, 0.1)}`}>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Avg. Response Time</span>
+                            <span className={`text-xs font-medium ${getPerformanceColorClass(analyticsSummary?.avg_response_time, 0.1, true)}`}>
                               {formatTime(analyticsSummary?.avg_response_time) || '0ms'}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full bg-gray-200 rounded overflow-hidden">
+                          <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-blue-600 rounded" 
+                              className="h-full bg-sky-600 dark:bg-sky-500 rounded-full" 
                               style={{ width: `${Math.min(((analyticsSummary?.avg_response_time || 0) / 1) * 100, 100)}%` }}
                             ></div>
                           </div>
                         </div>
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Requests (24h)</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Transactions (24h)</span>
                             <span className={`text-xs font-medium ${getPerformanceColorClass(analyticsSummary?.requests_24h, 500)}`}>
                               {formatNumber(analyticsSummary?.requests_24h || 0)}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full bg-gray-200 rounded overflow-hidden">
+                          <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-green-600 rounded" 
+                              className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full" 
                               style={{ width: `${Math.min((analyticsSummary?.requests_24h || 0) / 2000 * 100, 100)}%` }}
                             ></div>
                           </div>
@@ -1861,22 +2200,22 @@ function Analytics() {
                     </div>
                     
                     {/* API Performance */}
-                    <div className="bg-gray-50 rounded-lg p-5">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-4">Top API Routes</h4>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Top System Modules</h4>
                       <div className="space-y-3">
                         {analyticsSummary?.top_routes?.slice(0, 3).map((route, index) => (
                           <div key={index}>
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-gray-500 truncate w-40" title={route.route}>
-                                {route.route}
+                              <span className="text-xs text-gray-500 dark:text-gray-400 truncate w-40" title={route.route}>
+                                {getEndpointName(route.route)}
                               </span>
-                              <span className="text-xs font-medium text-gray-900">
+                              <span className="text-xs font-medium text-gray-900 dark:text-gray-200">
                                 {formatNumber(route.count || 0)}
                               </span>
                             </div>
-                            <div className="mt-1 h-1.5 w-full bg-gray-200 rounded overflow-hidden">
+                            <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                               <div 
-                                className="h-full bg-indigo-600 rounded" 
+                                className="h-full bg-teal-600 dark:bg-teal-500 rounded-full" 
                                 style={{ width: `${Math.min(((route.count || 0) / (analyticsSummary?.total_requests || 1)) * 100, 100)}%` }}
                               ></div>
                             </div>
@@ -1886,47 +2225,47 @@ function Analytics() {
                     </div>
                     
                     {/* Busiest Hours */}
-                    <div className="bg-gray-50 rounded-lg p-5 lg:col-span-1 md:col-span-2 lg:row-span-2">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-4">Traffic Overview</h4>
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 lg:col-span-1 md:col-span-2 lg:row-span-2">
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">System Activity Overview</h4>
                       <div className="space-y-3">
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Total Requests</span>
-                            <span className="text-xs font-medium text-gray-900">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Total Transactions</span>
+                            <span className="text-xs font-medium text-gray-900 dark:text-gray-200">
                               {formatNumber(analyticsSummary?.total_requests || 0)}
                             </span>
                           </div>
-                          <div className="mt-1 h-1.5 w-full bg-gray-200 rounded overflow-hidden">
-                            <div className="h-full bg-indigo-600 rounded w-full"></div>
+                          <div className="mt-1 h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-teal-600 dark:bg-teal-500 rounded-full w-full"></div>
                           </div>
                         </div>
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Busiest Hour</span>
-                            <span className="text-xs font-medium text-gray-900">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Peak Activity Time</span>
+                            <span className="text-xs font-medium text-gray-900 dark:text-gray-200">
                               {analyticsSummary?.busiest_hour || '7'}:00
                             </span>
                           </div>
-                          <div className="mt-1 text-xs text-gray-500">
-                            Peak traffic occurs around this time
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Highest system load occurs during this hour
                           </div>
                         </div>
                         <div className="pt-2">
-                          <div className="text-xs font-medium text-gray-900 mb-2">
-                            Report Summary
+                          <div className="text-xs font-medium text-gray-900 dark:text-gray-200 mb-2">
+                            System Performance Summary
                           </div>
-                          <div className="text-xs text-gray-600 space-y-1">
+                          <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                             <p>
-                              The system has processed <span className="font-medium">{formatNumber(analyticsSummary?.total_requests || 0)}</span> total requests.
+                              The healthcare platform has processed <span className="font-medium text-gray-800 dark:text-gray-200">{formatNumber(analyticsSummary?.total_requests || 0)}</span> total transactions.
                             </p>
                             <p>
-                              Average response time is <span className="font-medium">{formatTime(analyticsSummary?.avg_response_time)}</span>.
+                              Average response time is <span className="font-medium text-gray-800 dark:text-gray-200">{formatTime(analyticsSummary?.avg_response_time)}</span>, indicating {analyticsSummary?.avg_response_time < 0.5 ? 'excellent' : analyticsSummary?.avg_response_time < 1 ? 'good' : 'moderate'} system performance.
                             </p>
                             <p>
-                              Most active users access <span className="font-medium">{analyticsSummary?.top_routes?.[0]?.route || '/users/me'}</span> the most.
+                              Most active providers use <span className="font-medium text-gray-800 dark:text-gray-200">{getEndpointName(analyticsSummary?.top_routes?.[0]?.route || '/users/me')}</span> most frequently.
                             </p>
                             <p>
-                              System is most active during <span className="font-medium">{analyticsSummary?.busiest_hour || '7'}:00</span> hour.
+                              System activity peaks at <span className="font-medium text-gray-800 dark:text-gray-200">{analyticsSummary?.busiest_hour || '7'}:00</span>, suggesting optimal staffing during these hours.
                             </p>
                           </div>
                         </div>
