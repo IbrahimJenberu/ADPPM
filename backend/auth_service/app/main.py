@@ -53,12 +53,10 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["User Management"])
 app.include_router(service_auth.router, prefix="/service_auth", tags=["service_auth"])
 app.include_router(ws_router)
+app.include_router(analytics_router)  # Already has prefix="/analytics"
 # Add analytics middleware
 app.middleware("http")(analytics_middleware)
 
-# Include routers
-app.include_router(users.router, prefix="/users", tags=["users"])
-app.include_router(analytics_router)  # Already has prefix="/analytics"
 
 @app.get("/health", tags=["Health"])
 async def health_check():
