@@ -8,6 +8,16 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api" 
     DEBUG: bool = os.getenv("DEBUG", "False") == "True"
     
+    # Database connection pool settings 
+    DATABASE_MIN_CONNECTIONS = 5
+    DATABASE_MAX_CONNECTIONS = 20
+    DATABASE_MAX_QUERIES = 50000
+    DATABASE_CONNECTION_TIMEOUT = 60.0  # seconds
+
+    # Cache settings
+    CACHE_TTL = 300  # seconds (5 minutes)
+    CACHE_MAX_SIZE = 1000
+    
     # Database settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://labroom_user:labroom123@labroom_db:5432/labroom_db")
     DATABASE_MAX_CONNECTIONS: int = 10

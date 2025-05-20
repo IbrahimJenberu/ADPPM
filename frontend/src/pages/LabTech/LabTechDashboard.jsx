@@ -211,7 +211,7 @@ const LabDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [fromDate, setFromDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
+  const [fromDate, setFromDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
   const [toDate, setToDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -237,12 +237,13 @@ const LabDashboard = () => {
         }
       });
       setAnalytics(response.data);
+      console.log('Analytics data:', response.data); // Log the data to help debug
       setError(null);
       displayToast('Data refreshed successfully', 'success');
     } catch (err) {
+      console.error('Error fetching analytics:', err);
       setError('Failed to fetch analytics data. Please try again later.');
       displayToast('Failed to load data', 'error');
-      console.error('Error fetching analytics:', err);
     } finally {
       setLoading(false);
     }
@@ -296,185 +297,201 @@ const LabDashboard = () => {
     const chartTextColor = isDarkMode ? '#e2e8f0' : '#1e293b';
     const chartGridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)';
 
+    // Safely access data arrays with fallbacks
+    const dailyRequests = analytics.daily_requests || [];
+    const testTypeBreakdown = analytics.test_type_breakdown || [];
+
     // Create daily requests chart
     if (dailyChartRef.current) {
-      if (dailyChartInstance.current) {
-        dailyChartInstance.current.destroy();
-      }
+      try {
+        if (dailyChartInstance.current) {
+          dailyChartInstance.current.destroy();
+        }
 
-      const ctx = dailyChartRef.current.getContext('2d');
-      const gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
-      gradientFill.addColorStop(0, isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(56, 189, 248, 0.3)');
-      gradientFill.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+        const ctx = dailyChartRef.current.getContext('2d');
+        const gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientFill.addColorStop(0, isDarkMode ? 'rgba(56, 189, 248, 0.2)' : 'rgba(56, 189, 248, 0.3)');
+        gradientFill.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
 
-      const labels = analytics.daily_requests.map(item => item.date);
-      const data = analytics.daily_requests.map(item => item.count);
+        const labels = dailyRequests.map(item => item.date);
+        const data = dailyRequests.map(item => item.count);
 
-      dailyChartInstance.current = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            {
-              label: 'Daily Requests',
-              data,
-              borderColor: '#0ea5e9',
-              backgroundColor: gradientFill,
-              tension: 0.4,
-              fill: true,
-              pointBackgroundColor: '#0ea5e9',
-              pointBorderColor: isDarkMode ? '#1e293b' : '#ffffff',
-              pointBorderWidth: 2,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              display: false,
-            },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-              backgroundColor: isDarkMode ? 'rgba(51, 65, 85, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-              titleColor: isDarkMode ? '#e2e8f0' : '#1e293b',
-              bodyColor: isDarkMode ? '#e2e8f0' : '#1e293b',
-              borderColor: isDarkMode ? '#475569' : '#e2e8f0',
-              borderWidth: 1,
-              cornerRadius: 8,
-              padding: 12,
-              boxPadding: 6,
-              usePointStyle: true,
-              callbacks: {
-                label: (context) => `${context.dataset.label}: ${context.raw} tests`,
-              }
-            },
+        dailyChartInstance.current = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Daily Requests',
+                data,
+                borderColor: '#0ea5e9',
+                backgroundColor: gradientFill,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#0ea5e9',
+                pointBorderColor: isDarkMode ? '#1e293b' : '#ffffff',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+              },
+            ],
           },
-          scales: {
-            x: {
-              grid: {
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
                 display: false,
               },
-              ticks: {
-                color: chartTextColor,
-                font: {
-                  family: 'Inter, sans-serif',
-                  size: 11,
-                },
-                maxRotation: 45,
-                minRotation: 45,
-              }
-            },
-            y: {
-              beginAtZero: true,
-              ticks: {
-                precision: 0,
-                color: chartTextColor,
-                font: {
-                  family: 'Inter, sans-serif',
-                  size: 11,
-                },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+                backgroundColor: isDarkMode ? 'rgba(51, 65, 85, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                titleColor: isDarkMode ? '#e2e8f0' : '#1e293b',
+                bodyColor: isDarkMode ? '#e2e8f0' : '#1e293b',
+                borderColor: isDarkMode ? '#475569' : '#e2e8f0',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+                boxPadding: 6,
+                usePointStyle: true,
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${context.raw} tests`,
+                }
               },
-              grid: {
-                color: chartGridColor,
-                drawBorder: false,
+            },
+            scales: {
+              x: {
+                grid: {
+                  display: false,
+                },
+                ticks: {
+                  color: chartTextColor,
+                  font: {
+                    family: 'Inter, sans-serif',
+                    size: 11,
+                  },
+                  maxRotation: 45,
+                  minRotation: 45,
+                }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  precision: 0,
+                  color: chartTextColor,
+                  font: {
+                    family: 'Inter, sans-serif',
+                    size: 11,
+                  },
+                },
+                grid: {
+                  color: chartGridColor,
+                  drawBorder: false,
+                }
+              },
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index',
+            },
+            elements: {
+              line: {
+                borderWidth: 3,
               }
             },
+            animation: {
+              duration: 1500,
+              easing: 'easeOutQuart',
+            },
           },
-          interaction: {
-            intersect: false,
-            mode: 'index',
-          },
-          elements: {
-            line: {
-              borderWidth: 3,
-            }
-          },
-          animation: {
-            duration: 1500,
-            easing: 'easeOutQuart',
-          },
-        },
-      });
+        });
+      } catch (error) {
+        console.error('Error creating daily chart:', error);
+      }
     }
 
     // Create test type breakdown chart
-    if (testTypeChartRef.current && analytics.test_type_breakdown) {
-      if (testTypeChartInstance.current) {
-        testTypeChartInstance.current.destroy();
-      }
+    if (testTypeChartRef.current) {
+      try {
+        if (testTypeChartInstance.current) {
+          testTypeChartInstance.current.destroy();
+        }
 
-      const ctx = testTypeChartRef.current.getContext('2d');
-      const labels = analytics.test_type_breakdown.map(item => item.test_type);
-      const data = analytics.test_type_breakdown.map(item => item.count);
+        const ctx = testTypeChartRef.current.getContext('2d');
+        const labels = testTypeBreakdown.map(item => item.test_type);
+        const data = testTypeBreakdown.map(item => item.count);
 
-      testTypeChartInstance.current = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels,
-          datasets: [
-            {
-              data,
-              backgroundColor: [
-                '#06b6d4', // Cyan-500
-                '#3b82f6', // Blue-500
-                '#8b5cf6', // Violet-500
-                '#14b8a6', // Teal-500
-                '#22c55e', // Green-500
-                '#a855f7', // Purple-500
-                '#6366f1', // Indigo-500
-              ],
-              borderColor: isDarkMode ? '#1e293b' : '#ffffff',
-              borderWidth: 2,
-              hoverOffset: 6,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '70%',
-          plugins: {
-            legend: {
-              position: 'right',
-              labels: {
-                boxWidth: 12,
-                padding: 15,
-                font: {
-                  family: 'Inter, sans-serif',
-                  size: 11,
-                  weight: '500',
+        testTypeChartInstance.current = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [
+              {
+                data,
+                backgroundColor: [
+                  '#06b6d4', // Cyan-500
+                  '#3b82f6', // Blue-500
+                  '#8b5cf6', // Violet-500
+                  '#14b8a6', // Teal-500
+                  '#22c55e', // Green-500
+                  '#a855f7', // Purple-500
+                  '#6366f1', // Indigo-500
+                ],
+                borderColor: isDarkMode ? '#1e293b' : '#ffffff',
+                borderWidth: 2,
+                hoverOffset: 6,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: {
+                  boxWidth: 12,
+                  padding: 15,
+                  font: {
+                    family: 'Inter, sans-serif',
+                    size: 11,
+                    weight: '500',
+                  },
+                  color: chartTextColor,
                 },
-                color: chartTextColor,
+              },
+              tooltip: {
+                backgroundColor: isDarkMode ? 'rgba(51, 65, 85, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                titleColor: isDarkMode ? '#e2e8f0' : '#1e293b',
+                bodyColor: isDarkMode ? '#e2e8f0' : '#1e293b',
+                borderColor: isDarkMode ? '#475569' : '#e2e8f0',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+                boxPadding: 6,
+                usePointStyle: true,
+                callbacks: {
+                  label: (context) => {
+                    const totalValue = context.dataset.data.reduce((a, b) => a + b, 0) || 1;
+                    const percentage = ((context.raw / totalValue) * 100).toFixed(1);
+                    return `${context.label}: ${context.raw} tests (${percentage}%)`;
+                  },
+                }
               },
             },
-            tooltip: {
-              backgroundColor: isDarkMode ? 'rgba(51, 65, 85, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-              titleColor: isDarkMode ? '#e2e8f0' : '#1e293b',
-              bodyColor: isDarkMode ? '#e2e8f0' : '#1e293b',
-              borderColor: isDarkMode ? '#475569' : '#e2e8f0',
-              borderWidth: 1,
-              cornerRadius: 8,
-              padding: 12,
-              boxPadding: 6,
-              usePointStyle: true,
-              callbacks: {
-                label: (context) => `${context.label}: ${context.raw} tests (${((context.raw / context.dataset.data.reduce((a, b) => a + b, 0)) * 100).toFixed(1)}%)`,
-              }
+            animation: {
+              animateRotate: true,
+              animateScale: true,
+              duration: 1500,
+              easing: 'easeOutQuart',
             },
           },
-          animation: {
-            animateRotate: true,
-            animateScale: true,
-            duration: 1500,
-            easing: 'easeOutQuart',
-          },
-        },
-      });
+        });
+      } catch (error) {
+        console.error('Error creating test type chart:', error);
+      }
     }
   }, [analytics, loading, isDarkMode]);
 
@@ -517,6 +534,11 @@ const LabDashboard = () => {
         ></motion.div>
       </div>
     );
+  };
+
+  // Helper function to check if an array has data
+  const hasData = (arr) => {
+    return Array.isArray(arr) && arr.length > 0;
   };
 
   // Loading state with premium skeleton UI
@@ -628,7 +650,21 @@ const LabDashboard = () => {
 
   // Main dashboard view with premium UI
   if (analytics) {
-    const { metrics, status_breakdown, priority_breakdown } = analytics;
+    // Safely extract the data from the API response
+    const metrics = analytics.metrics || {
+      total_requests_today: 0,
+      pending_requests: 0,
+      completed_requests: 0,
+      unread_requests: 0,
+      average_response_time: 0
+    };
+    
+    const status_breakdown = analytics.status_breakdown || {};
+    const priority_breakdown = analytics.priority_breakdown || {};
+    
+    // Check if we have data for charts
+    const hasDailyData = hasData(analytics.daily_requests);
+    const hasTestTypeData = hasData(analytics.test_type_breakdown);
 
     return (
       <div className={`font-[Inter,system-ui,sans-serif] min-h-screen p-0 transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
@@ -874,9 +910,33 @@ const LabDashboard = () => {
                 }
                 delay={7}
               >
-                <div className="h-72">
-                  <canvas ref={dailyChartRef}></canvas>
-                </div>
+                {hasDailyData ? (
+                  <div className="h-72">
+                    <canvas ref={dailyChartRef}></canvas>
+                  </div>
+                ) : (
+                  <div className="h-72 flex items-center justify-center flex-col">
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+                      <FiBarChart2 className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-center">
+                      No daily test request data available for the selected period.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => {
+                        // Set date to last 30 days
+                        setFromDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
+                        setToDate(format(new Date(), 'yyyy-MM-dd'));
+                        setTimeout(() => handleDateRangeApply(), 100);
+                      }}
+                    >
+                      Try Last 30 Days
+                    </Button>
+                  </div>
+                )}
               </Card>
               
               {/* Test Type Breakdown */}
@@ -894,9 +954,33 @@ const LabDashboard = () => {
                 }
                 delay={8}
               >
-                <div className="h-72">
-                  <canvas ref={testTypeChartRef}></canvas>
-                </div>
+                {hasTestTypeData ? (
+                  <div className="h-72">
+                    <canvas ref={testTypeChartRef}></canvas>
+                  </div>
+                ) : (
+                  <div className="h-72 flex items-center justify-center flex-col">
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+                      <RiTestTubeLine className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-center">
+                      No test type distribution data available for the selected period.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => {
+                        // Set date to all time
+                        setFromDate('');
+                        setToDate('');
+                        setTimeout(() => handleDateRangeApply(), 100);
+                      }}
+                    >
+                      Show All Time Data
+                    </Button>
+                  </div>
+                )}
               </Card>
             </div>
             
@@ -908,39 +992,50 @@ const LabDashboard = () => {
                 icon={<FiCheckSquare />}
                 delay={9}
               >
-                <div className="space-y-5">
-                  {Object.keys(status_breakdown || {}).map((status, index) => {
-                    const count = status_breakdown[status];
-                    const total = Object.values(status_breakdown).reduce((sum, val) => sum + val, 0);
-                    const percentage = total > 0 ? (count / total) * 100 : 0;
-                    const { text, color, icon } = getStatusDisplay(status);
-                    
-                    return (
-                      <motion.div 
-                        key={status}
-                        whileHover={{ scale: 1.01 }}
-                        className="group"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.9 + (index * 0.1) }}
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center">
-                            <Badge color={color} icon={icon}>{text}</Badge>
+                {Object.keys(status_breakdown).length > 0 ? (
+                  <div className="space-y-5">
+                    {Object.keys(status_breakdown).map((status, index) => {
+                      const count = status_breakdown[status];
+                      const total = Object.values(status_breakdown).reduce((sum, val) => sum + val, 0);
+                      const percentage = total > 0 ? (count / total) * 100 : 0;
+                      const { text, color, icon } = getStatusDisplay(status);
+                      
+                      return (
+                        <motion.div 
+                          key={status}
+                          whileHover={{ scale: 1.01 }}
+                          className="group"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.9 + (index * 0.1) }}
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center">
+                              <Badge color={color} icon={icon}>{text}</Badge>
+                            </div>
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              {count} tests ({percentage.toFixed(1)}%)
+                            </span>
                           </div>
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            {count} tests ({percentage.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <ProgressBar 
-                          percentage={percentage} 
-                          color={color} 
-                          animate={true}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </div>
+                          <ProgressBar 
+                            percentage={percentage} 
+                            color={color} 
+                            animate={true}
+                          />
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center justify-center flex-col">
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+                      <FiCheckSquare className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-center">
+                      No status distribution data available.
+                    </p>
+                  </div>
+                )}
               </Card>
               
               {/* Priority Breakdown */}
@@ -949,78 +1044,52 @@ const LabDashboard = () => {
                 icon={<MdPriorityHigh />}
                 delay={10}
               >
-                <div className="space-y-5">
-                  {Object.keys(priority_breakdown || {}).map((priority, index) => {
-                    const count = priority_breakdown[priority];
-                    const total = Object.values(priority_breakdown).reduce((sum, val) => sum + val, 0);
-                    const percentage = total > 0 ? (count / total) * 100 : 0;
-                    const { text, color, icon } = getPriorityDisplay(priority);
-                    
-                    return (
-                      <motion.div 
-                        key={priority}
-                        whileHover={{ scale: 1.01 }}
-                        className="group"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 1.0 + (index * 0.1) }}
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="flex items-center">
-                            <Badge color={color} icon={icon}>{text}</Badge>
+                {Object.keys(priority_breakdown).length > 0 ? (
+                  <div className="space-y-5">
+                    {Object.keys(priority_breakdown).map((priority, index) => {
+                      const count = priority_breakdown[priority];
+                      const total = Object.values(priority_breakdown).reduce((sum, val) => sum + val, 0);
+                      const percentage = total > 0 ? (count / total) * 100 : 0;
+                      const { text, color, icon } = getPriorityDisplay(priority);
+                      
+                      return (
+                        <motion.div 
+                          key={priority}
+                          whileHover={{ scale: 1.01 }}
+                          className="group"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 1.0 + (index * 0.1) }}
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center">
+                              <Badge color={color} icon={icon}>{text}</Badge>
+                            </div>
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              {count} tests ({percentage.toFixed(1)}%)
+                            </span>
                           </div>
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                            {count} tests ({percentage.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <ProgressBar 
-                          percentage={percentage} 
-                          color={color} 
-                          animate={true}
-                        />
-                      </motion.div>
-                    );
-                  })}
-                </div>
+                          <ProgressBar 
+                            percentage={percentage} 
+                            color={color} 
+                            animate={true}
+                          />
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="h-64 flex items-center justify-center flex-col">
+                    <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+                      <MdPriorityHigh className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <p className="text-slate-500 dark:text-slate-400 text-center">
+                      No priority distribution data available.
+                    </p>
+                  </div>
+                )}
               </Card>
             </div>
-            
-            {/* Insights Card - New Premium Feature */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.1 }}
-              className="mb-8"
-            >
-              <div className="bg-gradient-to-r from-sky-50 to-indigo-50 dark:from-sky-900/20 dark:to-indigo-900/20 rounded-xl shadow-sm overflow-hidden border border-sky-100 dark:border-sky-800/30">
-                <div className="p-6 md:p-8">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                    <div className="flex items-start">
-                      <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400 mr-4">
-                        <MdOutlineEmojiObjects className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1">
-                          AI-Powered Insights
-                        </h3>
-                        <p className="text-slate-600 dark:text-slate-300 text-sm">
-                          Your lab is operating at <span className="font-semibold text-sky-600 dark:text-sky-400">92% efficiency</span> compared to similar facilities. Response times have improved by <span className="font-semibold text-emerald-600 dark:text-emerald-400">18%</span> in the last 30 days.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="md:text-right">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        icon={<MdOutlineTrendingUp className="w-4 h-4" />}
-                      >
-                        View Detailed Report
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
             
             {/* Last updated info with premium design */}
             <motion.div 

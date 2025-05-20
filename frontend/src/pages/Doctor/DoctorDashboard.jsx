@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { FiUsers, FiCalendar, FiFileText, FiAlertCircle, FiPhone, FiMapPin, FiSearch, FiTrendingUp, FiClock } from 'react-icons/fi';
 import { RiMentalHealthLine, RiPulseLine } from 'react-icons/ri';
@@ -32,6 +32,9 @@ export default function DoctorDashboard() {
   const [isLoadingLabMetrics, setIsLoadingLabMetrics] = useState(true);
   const [isLoadingPatientsTodayCount, setIsLoadingPatientsTodayCount] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Track if patient data has been fetched successfully
+  const patientDataFetched = useRef(false);
   
   const [errorMessages, setErrorMessages] = useState({
     patients: null,
@@ -174,39 +177,59 @@ export default function DoctorDashboard() {
     return age;
   };
   
+  // Memoized fetch patients function to avoid recreation on every render
+  const fetchPatients = useCallback(async () => {
+    if (patientDataFetched.current) {
+      return; // Don't fetch again if we've already successfully fetched
+    }
+
+    try {
+      setIsLoadingPatients(true);
+      
+      console.log("Fetching patients data...");
+      
+      // Using the patients endpoint you provided - removed limit to fetch all patients
+      const response = await axios.get('http://localhost:8024/patients/', {
+        params: {
+          doctor_id: doctorId,
+          skip: 0
+        }
+      });
+      
+      if (response.data.success) {
+        console.log(`Fetched ${response.data.patients.length} patients successfully`);
+        
+        // Only update if we got data
+        if (response.data.patients && Array.isArray(response.data.patients)) {
+          // Store all patients but only show 5 in the UI
+          const patientData = response.data.patients.slice(0, 5);
+          
+          // Set data in a single batch update to avoid race conditions
+          setActivePatients(patientData);
+          setTotalPatients(response.data.patients.length);
+          
+          // Mark that we've successfully fetched data
+          patientDataFetched.current = true;
+        }
+      } else {
+        console.error("Failed to fetch patients data:", response.data);
+        throw new Error("Failed to fetch patients data");
+      }
+    } catch (error) {
+      console.error("Error fetching patients:", error);
+      setErrorMessages(prev => ({
+        ...prev,
+        patients: error.response?.data?.detail || "Failed to load patients"
+      }));
+    } finally {
+      setIsLoadingPatients(false);
+    }
+  }, [doctorId]);
+  
   // Fetch active patients
   useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        setIsLoadingPatients(true);
-        // Using the patients endpoint you provided - removed limit to fetch all patients
-        const response = await axios.get('http://localhost:8024/patients/', {
-          params: {
-            doctor_id: doctorId,
-            skip: 0
-          }
-        });
-        
-        if (response.data.success) {
-          // Store all patients but only show 5 in the UI
-          setActivePatients(response.data.patients.slice(0, 5));
-          setTotalPatients(response.data.patients.length);
-        } else {
-          throw new Error("Failed to fetch patients data");
-        }
-      } catch (error) {
-        console.error("Error fetching patients:", error);
-        setErrorMessages(prev => ({
-          ...prev,
-          patients: error.response?.data?.detail || "Failed to load patients"
-        }));
-      } finally {
-        setIsLoadingPatients(false);
-      }
-    };
-    
     fetchPatients();
-  }, [doctorId]);
+  }, [fetchPatients]);
   
   // Fetch patients created today count
   useEffect(() => {
@@ -562,7 +585,10 @@ export default function DoctorDashboard() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="mt-4 px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl transition-colors duration-200 shadow-sm font-medium"
-                  onClick={() => window.location.reload()}
+                  onClick={() => { 
+                    patientDataFetched.current = false;
+                    fetchPatients();
+                  }}
                 >
                   Retry
                 </motion.button>
@@ -653,7 +679,7 @@ export default function DoctorDashboard() {
             
             <div className="p-5 border-t border-gray-200 dark:border-slate-700/70 flex justify-between items-center">
               <div className="text-sm text-gray-500 dark:text-gray-400">
-                Showing <span className="font-medium text-gray-700 dark:text-gray-300">5</span> of <span className="font-medium text-gray-700 dark:text-gray-300">{totalPatients}</span> patients
+                Showing <span className="font-medium text-gray-700 dark:text-gray-300">{activePatients.length}</span> of <span className="font-medium text-gray-700 dark:text-gray-300">{totalPatients}</span> patients
               </div>
               <motion.button 
                 whileHover={{ scale: 1.03 }}
@@ -819,7 +845,7 @@ export default function DoctorDashboard() {
                         <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Pending</span>
                         <span className="text-2xl font-bold text-gray-900 dark:text-white">{labMetrics.pending}</span>
                         <span className="text-xs text-amber-500 dark:text-amber-400 mt-1">
-                          {Math.round((labMetrics.pending / labMetrics.total) * 100)}% of total
+                          {Math.round((labMetrics.pending / labMetrics.total) * 100) || 0}% of total
                         </span>
                       </div>
                       

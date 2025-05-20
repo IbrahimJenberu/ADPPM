@@ -728,7 +728,7 @@ export default function LabRequestsDashboard() {
 
         const statusColors = [
           "rgba(255, 205, 86, 0.8)", // pending - yellow
-          "rgba(54, 162, 235, 0.8)", // in progress - blue
+          "rgba(93, 92, 222, 0.8)",  // in progress - purple (primary color)
           "rgba(75, 192, 192, 0.8)", // completed - green
           "rgba(201, 203, 207, 0.8)", // cancelled - gray
           "rgba(255, 99, 132, 0.8)", // rejected - red
@@ -772,7 +772,7 @@ export default function LabRequestsDashboard() {
               {
                 label: "Number of Requests",
                 data: safeTestTypeCounts.map((t) => t?.count || 0),
-                backgroundColor: "rgba(93, 92, 222, 0.8)",
+                backgroundColor: "rgba(93, 92, 222, 0.8)", // primary color
               },
             ],
           },
@@ -809,7 +809,7 @@ export default function LabRequestsDashboard() {
                 label: "Lab Requests",
                 data: safeTrendData.map((t) => t?.count || 0),
                 fill: false,
-                borderColor: "rgb(93, 92, 222)",
+                borderColor: "rgb(93, 92, 222)", // primary color
                 tension: 0.1,
               },
             ],
@@ -864,11 +864,11 @@ export default function LabRequestsDashboard() {
   const getUrgencyLabel = (urgency) => {
     switch (urgency) {
       case "high":
-        return { label: "High", class: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" };
+        return { label: "High", class: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-900/30" };
       case "medium":
-        return { label: "Medium", class: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300" };
+        return { label: "Medium", class: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/30" };
       default:
-        return { label: "Low", class: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" };
+        return { label: "Low", class: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-900/30" };
     }
   };
 
@@ -876,22 +876,79 @@ export default function LabRequestsDashboard() {
   const getStatusLabel = (status) => {
     switch (status) {
       case "pending":
-        return { label: "Pending", class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300" };
+        return { label: "Pending", class: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/30" };
       case "in_progress":
-        return { label: "In Progress", class: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" };
+        return { label: "In Progress", class: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-900/30" };
       case "completed":
-        return { label: "Completed", class: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" };
+        return { label: "Completed", class: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/30" };
       case "cancelled":
-        return { label: "Cancelled", class: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300" };
+        return { label: "Cancelled", class: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700/50" };
       case "rejected":
-        return { label: "Rejected", class: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300" };
+        return { label: "Rejected", class: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-900/30" };
       default:
-        return { label: status, class: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300" };
+        return { label: status, class: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700/50" };
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 font-sans antialiased relative">
+      <style jsx global>{`
+        :root {
+          --color-primary: 93, 92, 222; /* #5D5CDE */
+          --color-primary-dark: 74, 73, 177; /* #4A49B1 */
+          --color-primary-light: 131, 130, 233; /* #8382E9 */
+        }
+        
+        .bg-primary {
+          background-color: rgb(var(--color-primary));
+        }
+        
+        .bg-primary-dark {
+          background-color: rgb(var(--color-primary-dark));
+        }
+        
+        .bg-primary-light {
+          background-color: rgb(var(--color-primary-light));
+        }
+        
+        .text-primary {
+          color: rgb(var(--color-primary));
+        }
+        
+        .text-primary-dark {
+          color: rgb(var(--color-primary-dark));
+        }
+        
+        .border-primary {
+          border-color: rgb(var(--color-primary));
+        }
+        
+        .ring-primary {
+          --tw-ring-color: rgb(var(--color-primary));
+        }
+        
+        .from-primary {
+          --tw-gradient-from: rgb(var(--color-primary));
+        }
+        
+        .to-primary {
+          --tw-gradient-to: rgb(var(--color-primary));
+        }
+        
+        .shadow-primary\/20 {
+          --tw-shadow-color: rgb(var(--color-primary) / 0.2);
+          --tw-shadow: var(--tw-shadow-colored);
+        }
+        
+        .hover\:bg-primary:hover {
+          background-color: rgb(var(--color-primary));
+        }
+        
+        .hover\:text-primary:hover {
+          color: rgb(var(--color-primary));
+        }
+      `}</style>
+      
       {/* Animated network background */}
       <div className="absolute inset-0 opacity-30 pointer-events-none overflow-hidden">
         <canvas 
@@ -926,7 +983,7 @@ export default function LabRequestsDashboard() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
             <h1 className="text-4xl font-bold text-primary dark:text-white tracking-tight">
-              Lab Tests Dashboard
+              Lab Test Requests
             </h1>
             <p className="mt-1 text-gray-500 dark:text-gray-400">
               Manage and monitor laboratory test requests
@@ -934,7 +991,7 @@ export default function LabRequestsDashboard() {
           </div>
           
           <motion.button
-            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-primary to-indigo-600 text-white rounded-2xl hover:shadow-lg hover:shadow-primary/20 transition duration-300 font-medium text-base gap-2"
+            className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] text-white rounded-2xl hover:shadow-lg hover:shadow-[#5D5CDE]/20 transition duration-300 font-medium text-base gap-2"
             onClick={() => setShowRequestForm(true)}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
@@ -961,39 +1018,39 @@ export default function LabRequestsDashboard() {
               </div>
               <div className="mt-2 flex items-center space-x-4">
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-amber-400 mr-2"></div>
                   <span className="text-sm text-gray-600 dark:text-gray-300">Pending: {metrics.pending}</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-green-400 mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-emerald-400 mr-2"></div>
                   <span className="text-sm text-gray-600 dark:text-gray-300">Completed: {metrics.completed}</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-blue-400 mr-2"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#5D5CDE] mr-2"></div>
                   <span className="text-sm text-gray-600 dark:text-gray-300">In Progress: {metrics.in_progress}</span>
                 </div>
               </div>
             </div>
             <div 
-              className="p-4 rounded-2xl cursor-pointer bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 hover:shadow-md transition-all duration-300"
+              className="p-4 rounded-2xl cursor-pointer bg-gradient-to-br from-[#5D5CDE]/10 to-[#5D5CDE]/5 dark:from-[#5D5CDE]/20 dark:to-[#5D5CDE]/10 hover:shadow-md transition-all duration-300"
               onClick={() => fetchAnalyticsData(true)}
             >
-              <FiPieChart className="w-8 h-8 text-primary" />
+              <FiPieChart className="w-8 h-8 text-[#5D5CDE]" />
             </div>
           </div>
           
           <div className="mt-6 h-2 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
             <div className="flex h-full">
               <div 
-                className="bg-yellow-400 h-full" 
+                className="bg-amber-400 h-full" 
                 style={{ width: `${getSafePercentage(metrics.pending, getSafeTotal(analyticsData.status_counts))}%` }}
               ></div>
               <div 
-                className="bg-blue-400 h-full" 
+                className="bg-[#5D5CDE] h-full" 
                 style={{ width: `${getSafePercentage(metrics.in_progress, getSafeTotal(analyticsData.status_counts))}%` }}
               ></div>
               <div 
-                className="bg-green-400 h-full" 
+                className="bg-emerald-400 h-full" 
                 style={{ width: `${getSafePercentage(metrics.completed, getSafeTotal(analyticsData.status_counts))}%` }}
               ></div>
             </div>
@@ -1016,7 +1073,7 @@ export default function LabRequestsDashboard() {
                 <input
                   type="text"
                   placeholder="Search patient name, test type or ID..."
-                  className="pl-10 pr-4 py-3 w-full border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  className="pl-10 pr-4 py-3 w-full border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -1033,7 +1090,7 @@ export default function LabRequestsDashboard() {
                     });
                     fetchLabRequests(0, pageSize);
                   }}
-                  className="rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 py-2 px-3 text-sm focus:outline-none focus:ring-primary focus:border-primary"
+                  className="rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 py-2 px-3 text-sm focus:outline-none focus:ring-[#5D5CDE] focus:border-[#5D5CDE]"
                 >
                   <option value="created_at">Date</option>
                   <option value="urgency">Urgency</option>
@@ -1050,7 +1107,7 @@ export default function LabRequestsDashboard() {
                     });
                     fetchLabRequests(0, pageSize);
                   }}
-                  className="rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 py-2 px-3 text-sm focus:outline-none focus:ring-primary focus:border-primary"
+                  className="rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 py-2 px-3 text-sm focus:outline-none focus:ring-[#5D5CDE] focus:border-[#5D5CDE]"
                 >
                   <option value="desc">Newest first</option>
                   <option value="asc">Oldest first</option>
@@ -1063,8 +1120,8 @@ export default function LabRequestsDashboard() {
             <div className="flex justify-center items-center py-32">
               <div className="flex flex-col items-center">
                 <div className="relative w-20 h-20">
-                  <div className="absolute inset-0 rounded-full border-t-4 border-b-4 border-primary opacity-20 animate-ping"></div>
-                  <div className="animate-spin rounded-full h-20 w-20 border-4 border-gray-200 dark:border-gray-700 border-t-primary"></div>
+                  <div className="absolute inset-0 rounded-full border-t-4 border-b-4 border-[#5D5CDE] opacity-20 animate-ping"></div>
+                  <div className="animate-spin rounded-full h-20 w-20 border-4 border-gray-200 dark:border-gray-700 border-t-[#5D5CDE]"></div>
                 </div>
                 <p className="mt-6 text-gray-500 dark:text-gray-400 font-medium">Loading lab requests...</p>
               </div>
@@ -1078,7 +1135,7 @@ export default function LabRequestsDashboard() {
               <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">There was a problem fetching the lab requests data. Please try again or contact support if the issue persists.</p>
               <motion.button
                 onClick={() => fetchLabRequests()}
-                className="px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark transition duration-200 font-medium shadow-lg hover:shadow-primary/20"
+                className="px-6 py-3 bg-[#5D5CDE] text-white rounded-xl hover:bg-[#4A49B1] transition duration-200 font-medium shadow-lg hover:shadow-[#5D5CDE]/20"
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
@@ -1096,7 +1153,7 @@ export default function LabRequestsDashboard() {
                   <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">Try adjusting your search or create a new lab request to get started.</p>
                   <motion.button
                     onClick={() => setShowRequestForm(true)}
-                    className="px-6 py-3 bg-gradient-to-r from-primary to-indigo-600 text-white rounded-xl transition duration-200 font-medium flex items-center mx-auto shadow-lg hover:shadow-primary/20"
+                    className="px-6 py-3 bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] text-white rounded-xl transition duration-200 font-medium flex items-center mx-auto shadow-lg hover:shadow-[#5D5CDE]/20"
                     whileHover={{ scale: 1.03 }}
                     whileTap={{ scale: 0.97 }}
                   >
@@ -1141,8 +1198,8 @@ export default function LabRequestsDashboard() {
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-primary/10 to-indigo-200/20 dark:from-primary/20 dark:to-indigo-300/10 flex items-center justify-center mr-3 shadow-sm">
-                              <span className="text-primary font-semibold text-lg">
+                            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[#5D5CDE]/10 to-[#5D5CDE]/20 dark:from-[#5D5CDE]/20 dark:to-[#5D5CDE]/10 flex items-center justify-center mr-3 shadow-sm">
+                              <span className="text-[#5D5CDE] font-semibold text-lg">
                                 {request.patient_name?.charAt(0) || "U"}
                               </span>
                             </div>
@@ -1191,7 +1248,7 @@ export default function LabRequestsDashboard() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
                             <motion.button
-                              className="flex items-center justify-center p-2 rounded-xl bg-primary/10 dark:bg-primary/20 text-primary hover:bg-primary/20 dark:hover:bg-primary/30 transition-colors"
+                              className="flex items-center justify-center p-2 rounded-xl bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 text-[#5D5CDE] hover:bg-[#5D5CDE]/20 dark:hover:bg-[#5D5CDE]/30 transition-colors"
                               title="View details"
                               onClick={() => fetchLabRequestDetails(request.id)}
                               whileHover={{ scale: 1.1 }}
@@ -1266,7 +1323,7 @@ export default function LabRequestsDashboard() {
 
               {isLoadingMore && (
                 <div className="flex justify-center mt-4 pb-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 dark:border-gray-700 border-t-primary"></div>
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-200 dark:border-gray-700 border-t-[#5D5CDE]"></div>
                 </div>
               )}
             </div>
@@ -1290,7 +1347,7 @@ export default function LabRequestsDashboard() {
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     New Lab Test Request
                   </h2>
-                  <div className="h-1 w-16 bg-primary rounded-full mt-2"></div>
+                  <div className="h-1 w-16 bg-[#5D5CDE] rounded-full mt-2"></div>
                 </div>
                 <motion.button
                   onClick={() => setShowRequestForm(false)}
@@ -1320,7 +1377,7 @@ export default function LabRequestsDashboard() {
                         patient_id: e.target.value,
                       })
                     }
-                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base"
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base"
                     required
                   >
                     <option value="">Select a patient</option>
@@ -1349,7 +1406,7 @@ export default function LabRequestsDashboard() {
                         test_type: e.target.value,
                       })
                     }
-                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base"
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base"
                     required
                   >
                     <option value="">Select test type</option>
@@ -1384,7 +1441,7 @@ export default function LabRequestsDashboard() {
                     <div
                       className={`cursor-pointer rounded-xl flex items-center justify-center py-3 shadow-sm ${
                         newLabRequest.urgency === "medium"
-                          ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white"
+                          ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white"
                           : "border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                       }`}
                       onClick={() =>
@@ -1426,7 +1483,7 @@ export default function LabRequestsDashboard() {
                         notes: e.target.value,
                       })
                     }
-                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base resize-none"
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base resize-none"
                     placeholder="Add any special instructions or relevant clinical information"
                   ></textarea>
                 </div>
@@ -1443,7 +1500,7 @@ export default function LabRequestsDashboard() {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white bg-gradient-to-r from-primary to-indigo-600 hover:shadow-lg hover:shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] hover:shadow-lg hover:shadow-[#5D5CDE]/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5D5CDE]"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -1467,7 +1524,7 @@ export default function LabRequestsDashboard() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="bg-gradient-to-r from-primary to-indigo-600 text-white p-6 flex justify-between items-center">
+              <div className="bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] text-white p-6 flex justify-between items-center">
                 <div>
                   <h2 className="text-2xl font-bold">
                     Lab Request #{currentRequest.id}
@@ -1494,8 +1551,8 @@ export default function LabRequestsDashboard() {
                     <div className="md:col-span-2 space-y-6">
                       <div className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-750 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                         <div className="flex items-center mb-6">
-                          <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-xl mr-4">
-                            <FiActivity className="w-6 h-6 text-primary" />
+                          <div className="p-3 bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 rounded-xl mr-4">
+                            <FiActivity className="w-6 h-6 text-[#5D5CDE]" />
                           </div>
                           <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                             Test Information
@@ -1549,8 +1606,8 @@ export default function LabRequestsDashboard() {
                       <div className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-750 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                         <div className="flex justify-between items-center mb-6">
                           <div className="flex items-center">
-                            <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-xl mr-4">
-                              <FiFile className="w-6 h-6 text-primary" />
+                            <div className="p-3 bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 rounded-xl mr-4">
+                              <FiFile className="w-6 h-6 text-[#5D5CDE]" />
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                               Files & Results
@@ -1558,7 +1615,7 @@ export default function LabRequestsDashboard() {
                           </div>
                           <motion.button
                             onClick={() => setShowUploadModal(true)}
-                            className="text-white bg-primary hover:bg-primary-dark text-sm flex items-center px-4 py-2 rounded-xl shadow-sm"
+                            className="text-white bg-[#5D5CDE] hover:bg-[#4A49B1] text-sm flex items-center px-4 py-2 rounded-xl shadow-sm"
                             disabled={
                               currentRequest.status === "completed" ||
                               currentRequest.status === "cancelled" ||
@@ -1583,11 +1640,11 @@ export default function LabRequestsDashboard() {
                                 transition={{ duration: 0.2, delay: index * 0.05 }}
                               >
                                 <div className="flex items-center">
-                                  <div className="h-12 w-12 flex items-center justify-center bg-primary/10 dark:bg-primary/20 rounded-xl text-primary mr-3">
+                                  <div className="h-12 w-12 flex items-center justify-center bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 rounded-xl text-[#5D5CDE] mr-3">
                                     <FiFile className="h-6 w-6" />
                                   </div>
                                   <div className="ml-1">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                                       {file.filename}
                                     </p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -1598,7 +1655,7 @@ export default function LabRequestsDashboard() {
 
                                 <motion.a
                                   href={file.download_url}
-                                  className="text-primary hover:text-primary-dark p-2 rounded-full hover:bg-primary/10 dark:hover:bg-primary/20"
+                                  className="text-[#5D5CDE] hover:text-[#4A49B1] p-2 rounded-full hover:bg-[#5D5CDE]/10 dark:hover:bg-[#5D5CDE]/20"
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   whileHover={{ scale: 1.1 }}
@@ -1624,8 +1681,8 @@ export default function LabRequestsDashboard() {
                       <div className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-750 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                         <div className="flex justify-between items-center mb-6">
                           <div className="flex items-center">
-                            <div className="p-3 bg-primary/10 dark:bg-primary/20 rounded-xl mr-4">
-                              <FiMessageCircle className="w-6 h-6 text-primary" />
+                            <div className="p-3 bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 rounded-xl mr-4">
+                              <FiMessageCircle className="w-6 h-6 text-[#5D5CDE]" />
                             </div>
                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
                               Comments
@@ -1633,7 +1690,7 @@ export default function LabRequestsDashboard() {
                           </div>
                           <motion.button
                             onClick={() => setShowCommentModal(true)}
-                            className="text-white bg-primary hover:bg-primary-dark text-sm flex items-center px-4 py-2 rounded-xl shadow-sm"
+                            className="text-white bg-[#5D5CDE] hover:bg-[#4A49B1] text-sm flex items-center px-4 py-2 rounded-xl shadow-sm"
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                           >
@@ -1654,7 +1711,7 @@ export default function LabRequestsDashboard() {
                               >
                                 <div className="flex justify-between items-start">
                                   <div className="flex items-center">
-                                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-indigo-300/20 dark:from-primary/30 dark:to-indigo-400/10 flex items-center justify-center mr-3 text-primary font-semibold">
+                                    <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#5D5CDE]/20 to-[#5D5CDE]/30 dark:from-[#5D5CDE]/30 dark:to-[#5D5CDE]/40 flex items-center justify-center mr-3 text-[#5D5CDE] font-semibold">
                                       {comment.user_name.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
@@ -1668,7 +1725,7 @@ export default function LabRequestsDashboard() {
                                     </div>
                                   </div>
                                   {comment.is_private && (
-                                    <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-xs px-2 py-1 rounded-full font-medium">
+                                    <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-xs px-2 py-1 rounded-full font-medium border border-amber-200 dark:border-amber-900/30">
                                       Private
                                     </span>
                                   )}
@@ -1696,9 +1753,9 @@ export default function LabRequestsDashboard() {
 
                     {/* Sidebar with patient info */}
                     <div className="space-y-6">
-                      <div className="bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-900/20 dark:to-gray-750 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm">
+                      <div className="bg-gradient-to-br from-[#5D5CDE]/5 to-white dark:from-[#5D5CDE]/10 dark:to-gray-750 p-6 rounded-2xl border border-[#5D5CDE]/10 dark:border-[#5D5CDE]/20 shadow-sm">
                         <div className="flex items-center mb-6">
-                          <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-primary to-indigo-500 dark:from-primary dark:to-indigo-600 flex items-center justify-center text-2xl text-white font-semibold shadow-lg">
+                          <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-[#5D5CDE] to-[#4A49B1] dark:from-[#5D5CDE] dark:to-[#4A49B1] flex items-center justify-center text-2xl text-white font-semibold shadow-lg">
                             {currentRequest.patient_name?.charAt(0) || "P"}
                           </div>
                           <div className="ml-4">
@@ -1792,7 +1849,7 @@ export default function LabRequestsDashboard() {
                                     toast.error("Invalid urgency level. Must be one of: high, medium, low");
                                   }
                                 }}
-                                className="w-full flex justify-center items-center px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:shadow-lg hover:shadow-orange-500/20 transition duration-200"
+                                className="w-full flex justify-center items-center px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:shadow-lg hover:shadow-amber-500/20 transition duration-200"
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                               >
@@ -1829,7 +1886,7 @@ export default function LabRequestsDashboard() {
                                 "_blank"
                               );
                             }}
-                            className="w-full flex justify-center items-center px-4 py-3 bg-gradient-to-r from-primary to-indigo-600 text-white rounded-xl hover:shadow-lg hover:shadow-primary/20 transition duration-200"
+                            className="w-full flex justify-center items-center px-4 py-3 bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] text-white rounded-xl hover:shadow-lg hover:shadow-[#5D5CDE]/20 transition duration-200"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
@@ -1863,7 +1920,7 @@ export default function LabRequestsDashboard() {
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     Add Comment
                   </h2>
-                  <div className="h-1 w-16 bg-primary rounded-full mt-2"></div>
+                  <div className="h-1 w-16 bg-[#5D5CDE] rounded-full mt-2"></div>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     For Lab Request #{currentRequest.id}
                   </p>
@@ -1894,7 +1951,7 @@ export default function LabRequestsDashboard() {
                     onChange={(e) =>
                       setNewComment({ ...newComment, comment: e.target.value })
                     }
-                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base resize-none"
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base resize-none"
                     placeholder="Enter your comment here"
                     required
                   ></textarea>
@@ -1919,7 +1976,7 @@ export default function LabRequestsDashboard() {
                       htmlFor="is_private"
                       className={`absolute inset-0 cursor-pointer rounded-full transition-colors duration-300 ${
                         newComment.is_private 
-                          ? "bg-primary" 
+                          ? "bg-[#5D5CDE]" 
                           : "bg-gray-300 dark:bg-gray-600"
                       }`}
                     >
@@ -1950,7 +2007,7 @@ export default function LabRequestsDashboard() {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white bg-gradient-to-r from-primary to-indigo-600 hover:shadow-lg hover:shadow-primary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    className="px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] hover:shadow-lg hover:shadow-[#5D5CDE]/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5D5CDE]"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -1979,7 +2036,7 @@ export default function LabRequestsDashboard() {
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     Upload File
                   </h2>
-                  <div className="h-1 w-16 bg-primary rounded-full mt-2"></div>
+                  <div className="h-1 w-16 bg-[#5D5CDE] rounded-full mt-2"></div>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     For Lab Request #{currentRequest.id}
                   </p>
@@ -2002,8 +2059,8 @@ export default function LabRequestsDashboard() {
                   <div className="flex items-center justify-center w-full">
                     <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-2xl cursor-pointer bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600 transition-colors duration-200">
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <div className="p-3 mb-2 rounded-full bg-primary/10 dark:bg-primary/20">
-                          <FiUpload className="w-8 h-8 text-primary" />
+                        <div className="p-3 mb-2 rounded-full bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20">
+                          <FiUpload className="w-8 h-8 text-[#5D5CDE]" />
                         </div>
                         <p className="mb-2 text-sm text-gray-700 dark:text-gray-300">
                           <span className="font-semibold">Click to upload</span>{" "}
@@ -2030,9 +2087,9 @@ export default function LabRequestsDashboard() {
                     </label>
                   </div>
                   {fileUpload.file && (
-                    <div className="mt-4 p-4 bg-gradient-to-r from-primary/5 to-indigo-50 dark:from-primary/10 dark:to-indigo-900/10 rounded-xl border border-primary/20 dark:border-primary/30">
+                    <div className="mt-4 p-4 bg-gradient-to-r from-[#5D5CDE]/5 to-[#5D5CDE]/10 dark:from-[#5D5CDE]/10 dark:to-[#5D5CDE]/20 rounded-xl border border-[#5D5CDE]/20 dark:border-[#5D5CDE]/30">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 flex items-center justify-center bg-primary/10 dark:bg-primary/20 rounded-xl text-primary mr-3 shadow-sm">
+                        <div className="h-10 w-10 flex items-center justify-center bg-[#5D5CDE]/10 dark:bg-[#5D5CDE]/20 rounded-xl text-[#5D5CDE] mr-3 shadow-sm">
                           <FiFile className="h-5 w-5" />
                         </div>
                         <div className="overflow-hidden">
@@ -2066,7 +2123,7 @@ export default function LabRequestsDashboard() {
                         description: e.target.value,
                       })
                     }
-                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-base"
+                    className="block w-full border border-gray-300 dark:border-gray-600 rounded-xl shadow-sm py-3 px-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5D5CDE] focus:border-[#5D5CDE] text-base"
                     placeholder="Brief description of the file"
                   />
                 </div>
@@ -2083,9 +2140,9 @@ export default function LabRequestsDashboard() {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className={`px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
+                    className={`px-6 py-3 border border-transparent rounded-xl shadow-md text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5D5CDE] ${
                       fileUpload.file 
-                        ? "bg-gradient-to-r from-primary to-indigo-600 hover:shadow-lg hover:shadow-primary/20" 
+                        ? "bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] hover:shadow-lg hover:shadow-[#5D5CDE]/20" 
                         : "bg-gray-400 dark:bg-gray-600 cursor-not-allowed"
                     }`}
                     disabled={!fileUpload.file}
@@ -2112,7 +2169,7 @@ export default function LabRequestsDashboard() {
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="bg-gradient-to-r from-primary to-indigo-600 text-white p-6 flex justify-between items-center">
+              <div className="bg-gradient-to-r from-[#5D5CDE] to-[#4A49B1] text-white p-6 flex justify-between items-center">
                 <div>
                   <h2 className="text-2xl font-bold">
                     Lab Requests Analytics
@@ -2135,14 +2192,14 @@ export default function LabRequestsDashboard() {
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-4rem)]">
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-8">
                   <motion.div 
-                    className="bg-gradient-to-br from-primary/10 to-blue-100/20 dark:from-primary/20 dark:to-blue-900/20 p-6 rounded-2xl border border-primary/20 dark:border-primary/30 shadow-md"
+                    className="bg-gradient-to-br from-[#5D5CDE]/10 to-[#5D5CDE]/5 dark:from-[#5D5CDE]/20 dark:to-[#5D5CDE]/10 p-6 rounded-2xl border border-[#5D5CDE]/20 dark:border-[#5D5CDE]/30 shadow-md"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4 }}
                   >
                     <div className="flex items-center">
                       <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md">
-                        <FiPieChart className="w-8 h-8 text-primary" />
+                        <FiPieChart className="w-8 h-8 text-[#5D5CDE]" />
                       </div>
                       <div className="ml-6">
                         <h3 className="text-sm font-medium uppercase text-gray-500 dark:text-gray-400">
@@ -2153,11 +2210,11 @@ export default function LabRequestsDashboard() {
                         </p>
                         <div className="mt-2 flex items-center space-x-4">
                           <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full bg-yellow-400 mr-2"></div>
+                            <div className="w-3 h-3 rounded-full bg-amber-400 mr-2"></div>
                             <span className="text-sm text-gray-600 dark:text-gray-300">Pending: {analyticsData.status_counts?.pending || 0}</span>
                           </div>
                           <div className="flex items-center">
-                            <div className="w-3 h-3 rounded-full bg-green-400 mr-2"></div>
+                            <div className="w-3 h-3 rounded-full bg-emerald-400 mr-2"></div>
                             <span className="text-sm text-gray-600 dark:text-gray-300">Completed: {analyticsData.status_counts?.completed || 0}</span>
                           </div>
                         </div>
@@ -2213,7 +2270,7 @@ export default function LabRequestsDashboard() {
                       </div>
 
                       <div className="text-center">
-                        <div className="text-3xl font-bold text-orange-500 dark:text-orange-400">
+                        <div className="text-3xl font-bold text-amber-500 dark:text-amber-400">
                           {analyticsData.urgency_counts?.medium || 0}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Medium</div>
@@ -2241,7 +2298,7 @@ export default function LabRequestsDashboard() {
                           }}
                         ></div>
                         <div
-                          className="bg-orange-500 dark:bg-orange-600 h-full"
+                          className="bg-amber-500 dark:bg-amber-600 h-full"
                           style={{
                             width: `${getSafePercentage(
                               analyticsData.urgency_counts?.medium || 0,
