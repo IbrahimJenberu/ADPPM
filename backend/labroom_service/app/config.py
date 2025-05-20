@@ -9,10 +9,10 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("DEBUG", "False") == "True"
     
     # Database connection pool settings 
-    DATABASE_MIN_CONNECTIONS = 5
-    DATABASE_MAX_CONNECTIONS = 20
-    DATABASE_MAX_QUERIES = 50000
-    DATABASE_CONNECTION_TIMEOUT = 60.0  # seconds
+    DATABASE_MIN_CONNECTIONS: ClassVar[int] = 5
+    DATABASE_MAX_CONNECTIONS: ClassVar[int] = 20
+    DATABASE_MAX_QUERIES: ClassVar[int] = 50000
+    DATABASE_CONNECTION_TIMEOUT: ClassVar[int] = 60.0  # seconds
 
     # Cache settings
     CACHE_TTL = 300  # seconds (5 minutes)
