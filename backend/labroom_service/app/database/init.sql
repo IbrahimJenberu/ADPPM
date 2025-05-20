@@ -232,3 +232,16 @@ CREATE INDEX IF NOT EXISTS idx_lab_request_events_lab_request_id ON lab_request_
 CREATE INDEX IF NOT EXISTS idx_lab_request_events_event_type ON lab_request_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_analytics_metrics_metric_date ON analytics_metrics(metric_date);
 CREATE INDEX IF NOT EXISTS idx_lab_requests_is_read ON lab_requests(is_read) WHERE is_deleted = FALSE;
+
+-- Indexes for improved performance
+CREATE INDEX IF NOT EXISTS idx_lab_requests_created_at ON lab_requests(created_at DESC) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_lab_requests_priority_status ON lab_requests(priority, status) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_lab_requests_test_type ON lab_requests(test_type) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_lab_requests_patient_doctor ON lab_requests(patient_id, doctor_id) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_lab_results_created_at ON lab_results(created_at DESC);
+
+-- Composite index for pagination
+CREATE INDEX IF NOT EXISTS idx_lab_requests_pagination ON lab_requests(created_at DESC, id DESC) WHERE is_deleted = FALSE;
+
+-- Index for lab results query
+CREATE INDEX IF NOT EXISTS idx_lab_results_request_id_created ON lab_results(lab_request_id, created_at DESC) WHERE is_deleted = FALSE;
