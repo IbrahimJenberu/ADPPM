@@ -17,3 +17,4 @@ aiohttp==3.8.5
 reportlab==3.6.12
 pillow==9.4.0
 websockets==10.4
+cachetools>=5.3.0
