@@ -2716,14 +2716,6 @@ function LabRequestsContent() {
                 <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-medium">{totalRequests}</span> 
                 <span>total requests</span>
                 
-                {/* Test button to simulate a request */}
-                <button
-                  onClick={simulateLabRequest}
-                  className="ml-3 px-2 py-0.5 rounded-md bg-green-100 text-green-800 font-medium flex items-center"
-                  type="button"
-                >
-                  <FiPlay className="mr-1 h-3 w-3" /> Test Notification
-                </button>
               </div>
             </div>
             

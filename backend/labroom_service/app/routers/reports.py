@@ -897,7 +897,8 @@ async def generate_pdf_report(
         from reportlab.lib import colors
         
         # Create file path
-        filename = f"report_{report_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"report_{report_id}_{timestamp}.pdf"
         
         # Create upload directory if it doesn't exist
         try:
@@ -1171,21 +1172,49 @@ async def generate_pdf_report(
             logger.error(f"Error saving PDF file: {str(file_error)}")
             raise
 
-        # Update DB with file path
-        logger.debug("Updating database with file path")
-        conn = await get_connection()
-        try:
-            await conn.execute(
-                "UPDATE lab_reports SET file_path = $1 WHERE id = $2",
-                file_path, str(report_id)
-            )
-        except Exception as db_error:
-            logger.error(f"Database error updating file path: {str(db_error)}")
-            # Don't raise here - the file was still generated
-        finally:
-            if conn:
-                await conn.close()
-
+        # Update DB with file path - THIS IS THE CRITICAL PART THAT NEEDS TO WORK
+        logger.debug("Updating database with final file path")
+        db_update_retries = 0
+        
+        while db_update_retries < MAX_DB_RETRIES:
+            try:
+                conn = await get_connection()
+                
+                # Use a more robust query with a timestamp update
+                update_query = """
+                    UPDATE lab_reports 
+                    SET file_path = $1, updated_at = NOW() 
+                    WHERE id = $2 
+                    RETURNING id
+                """
+                
+                result = await conn.fetchval(update_query, file_path, str(report_id))
+                
+                if result:
+                    logger.info(f"Successfully updated database record for report {report_id} with file path: {file_path}")
+                    await conn.close()
+                    conn = None
+                    break
+                else:
+                    logger.warning(f"Database update query returned no results for report {report_id}")
+                    raise Exception("No rows updated")
+                
+            except Exception as db_error:
+                db_update_retries += 1
+                logger.error(f"Database error updating file path (attempt {db_update_retries}/{MAX_DB_RETRIES}): {str(db_error)}")
+                
+                if conn:
+                    try:
+                        await conn.close()
+                        conn = None
+                    except:
+                        pass
+                        
+                if db_update_retries < MAX_DB_RETRIES:
+                    await asyncio.sleep(DB_RETRY_DELAY * db_update_retries)  # Exponential backoff
+                else:
+                    logger.error(f"All database update attempts failed for report {report_id}. File was generated at {file_path} but database was not updated.")
+            
         return file_path
 
     except Exception as e:
@@ -1205,15 +1234,24 @@ async def generate_pdf_report(
                 conn = await get_connection()
                 
             error_message = f"error_{str(e)[:100]}"  # Truncate long error messages
-            await conn.execute(
-                "UPDATE lab_reports SET file_path = $1 WHERE id = $2",
-                error_message, str(report_id)
-            )
+            
+            # Use a more robust error update query
+            error_update_query = """
+                UPDATE lab_reports 
+                SET file_path = $1, updated_at = NOW() 
+                WHERE id = $2
+            """
+            
+            await conn.execute(error_update_query, error_message, str(report_id))
+            logger.info(f"Updated database with error status for report {report_id}")
         except Exception as update_error:
             logger.error(f"Failed to update error status: {str(update_error)}")
         finally:
             if conn:
-                await conn.close()
+                try:
+                    await conn.close()
+                except:
+                    pass
                 
         raise
 

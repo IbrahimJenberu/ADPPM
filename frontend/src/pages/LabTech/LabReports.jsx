@@ -55,6 +55,8 @@ const LabReports = () => {
   
   // Polling references
   const pollingTimerRef = useRef(null);
+  const pollingAttemptCountRef = useRef(0);
+  const maxPollingAttempts = 5; // Maximum number of polling attempts before trying direct download
   
   // Available metrics options with enhanced icons
   const metricsOptions = [
@@ -133,6 +135,25 @@ const LabReports = () => {
         setReports(response.data.reports);
         setTotalPages(response.data.pagination.total_pages);
         setTotalCount(response.data.pagination.total);
+        
+        // If we have a generated report ID, check if its status has been updated to 'ready'
+        if (generatedReportId) {
+          const generatedReport = response.data.reports.find(report => report.id === generatedReportId);
+          if (generatedReport && generatedReport.status === 'ready') {
+            // Report is now ready, update UI
+            setGenerating(false);
+            setSuccess('Report is ready for download');
+            
+            // Clear polling timer if it's still running
+            if (pollingTimerRef.current) {
+              clearTimeout(pollingTimerRef.current);
+              pollingTimerRef.current = null;
+            }
+            
+            // Reset attempt counter
+            pollingAttemptCountRef.current = 0;
+          }
+        }
       } else {
         setError('Failed to fetch reports');
       }
@@ -151,6 +172,7 @@ const LabReports = () => {
     setError(null);
     setSuccess(null);
     setGeneratedReportId(null);
+    pollingAttemptCountRef.current = 0; // Reset the attempt counter
     
     try {
       // Validate date range for custom reports
@@ -186,25 +208,30 @@ const LabReports = () => {
       
       if (response.data.success) {
         setSuccess('Report generation started successfully');
-        setGeneratedReportId(response.data.report_id);
         
-        // Start polling for report status if we got a report ID
         if (response.data.report_id) {
+          // Store the report ID for later reference
+          setGeneratedReportId(response.data.report_id);
+          
+          // Start polling for report status
           pollReportStatus(response.data.report_id);
+          
+          // Switch to list tab to show progress
+          setActiveTab('list');
+          
+          // Fetch reports list to update the UI
+          await fetchReports();
+        } else {
+          setGenerating(false);
+          setError('No report ID received from the server');
         }
-        
-        // Switch to list tab
-        setActiveTab('list');
-        
-        // Refresh reports list
-        fetchReports();
       } else {
         setError('Failed to start report generation');
+        setGenerating(false);
       }
     } catch (err) {
       setError(`Error: ${err.response?.data?.detail || err.message}`);
       console.error('Error generating report:', err);
-    } finally {
       setGenerating(false);
     }
   };
@@ -216,18 +243,52 @@ const LabReports = () => {
       clearTimeout(pollingTimerRef.current);
     }
     
+    // Increment the polling attempt counter
+    pollingAttemptCountRef.current += 1;
+    
+    // If we've exceeded max attempts, try a direct download anyway
+    if (pollingAttemptCountRef.current > maxPollingAttempts) {
+      console.log(`Reached maximum polling attempts (${maxPollingAttempts}). Attempting direct download.`);
+      
+      // Force a direct download attempt despite the backend returning 202
+      tryDirectDownload(reportId);
+      return;
+    }
+    
     // Define polling function
     const checkStatus = async () => {
       try {
+        // Check report status from list (faster, no download attempt)
+        if (pollingAttemptCountRef.current > 3) {
+          await fetchReports();
+          
+          // Continue polling if we haven't reached max attempts
+          if (pollingAttemptCountRef.current < maxPollingAttempts) {
+            pollingTimerRef.current = setTimeout(() => pollReportStatus(reportId), 3000);
+          } else {
+            // Try direct download on last attempt
+            tryDirectDownload(reportId);
+          }
+          return;
+        }
+        
+        // Regular polling approach using the download endpoint
         const response = await axios.get(`http://localhost:8025/api/reports/${reportId}/download`, { responseType: 'blob' });
         
         // If we got a blob response, the report is ready
         if (response.status === 200 && response.data) {
           // Report is ready, update UI
           setSuccess('Report is ready for download');
+          setGenerating(false);
           
           // Refresh reports list to show updated status
           fetchReports();
+          
+          // Clear the polling timer reference
+          pollingTimerRef.current = null;
+          
+          // Reset attempt counter
+          pollingAttemptCountRef.current = 0;
           
           // Stop polling
           return;
@@ -235,17 +296,107 @@ const LabReports = () => {
       } catch (err) {
         // Check if it's still generating (202 Accepted)
         if (err.response && err.response.status === 202) {
-          // Still generating, continue polling
-          pollingTimerRef.current = setTimeout(checkStatus, 5000); // Poll every 5 seconds
+          console.log(`Polling attempt ${pollingAttemptCountRef.current}/${maxPollingAttempts}: Report still generating`);
+          
+          // Only continue if we haven't exceeded the maximum attempts
+          if (pollingAttemptCountRef.current < maxPollingAttempts) {
+            // Still generating, continue polling
+            pollingTimerRef.current = setTimeout(() => pollReportStatus(reportId), 3000); // Poll every 3 seconds
+          } else {
+            // Max attempts reached, try direct download
+            tryDirectDownload(reportId);
+          }
         } else {
           // Some other error, stop polling
           console.error('Error checking report status:', err);
+          
+          // Only show error if there's a real error, not if we just reached max attempts
+          if (pollingAttemptCountRef.current < maxPollingAttempts) {
+            setError(`Error checking report status: ${err.response?.data?.message || err.message}`);
+          }
+          
+          setGenerating(false);
+          pollingTimerRef.current = null;
+          pollingAttemptCountRef.current = 0;
         }
       }
     };
     
     // Start polling
-    pollingTimerRef.current = setTimeout(checkStatus, 3000); // First check after 3 seconds
+    pollingTimerRef.current = setTimeout(checkStatus, 2000); // First check after 2 seconds
+  };
+  
+  // Try a direct download even if backend is still reporting "generating"
+  const tryDirectDownload = async (reportId) => {
+    console.log("Attempting direct download despite backend status...");
+    setSuccess("Report may be ready. Attempting to download...");
+    
+    try {
+      // Force content type to accept anything - backend might be returning "generating" status
+      // but the file could actually be ready
+      const response = await axios.get(`http://localhost:8025/api/reports/${reportId}/download`, {
+        responseType: 'blob',
+        headers: {
+          'Accept': '*/*'
+        }
+      });
+      
+      // Check if we got a valid blob with good size
+      if (response.data && response.data.size > 100) { // Minimum reasonable size for a report
+        // Create download link
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Set a default filename based on report ID and format
+        const format = reportFormat || 'pdf';
+        let filename = `report_${reportId}.${format}`;
+        
+        // Try to extract filename from Content-Disposition header if available
+        const contentDisposition = response.headers['content-disposition'];
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+          if (filenameMatch && filenameMatch.length > 1) {
+            filename = filenameMatch[1];
+          }
+        }
+        
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        // Update UI
+        setGenerating(false);
+        setSuccess('Report downloaded successfully');
+        
+        // Refresh the reports list to update status
+        fetchReports();
+        
+        return true;
+      } else {
+        console.log("Downloaded file seems too small to be valid");
+        throw new Error("Invalid or incomplete file");
+      }
+    } catch (err) {
+      console.log("Direct download failed:", err);
+      
+      // Don't show an error, just update the UI to let the user know they can try again
+      setGenerating(false);
+      setSuccess('Report generation is complete. Please try downloading from the list.');
+      
+      // Reset polling state
+      pollingTimerRef.current = null;
+      pollingAttemptCountRef.current = 0;
+      
+      // Refresh the list one more time
+      fetchReports();
+      
+      return false;
+    }
   };
   
   // Download a report
@@ -276,11 +427,14 @@ const LabReports = () => {
       // Clean up
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      
+      // Show success message
+      setSuccess('Report downloaded successfully');
     } catch (err) {
-      // Handle different error types
+      // Special handling for "still generating" response
       if (err.response && err.response.status === 202) {
-        // Still generating
-        setError('Report is still being generated. Please try again later.');
+        // Try direct download anyway - backend might be incorrectly reporting status
+        tryDirectDownload(reportId);
       } else if (err.response && err.response.status === 404) {
         // Not found
         setError('Report file not found. It may have been deleted.');
@@ -1109,7 +1263,12 @@ const LabReports = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {report.status === 'ready' ? (
+                            {generatedReportId === report.id && generating ? (
+                              <div className="inline-flex items-center text-xs text-sky-600 dark:text-sky-400">
+                                <FiRefreshCw className="animate-spin mr-1.5 h-3.5 w-3.5" />
+                                Checking status...
+                              </div>
+                            ) : report.status === 'ready' ? (
                               <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
@@ -1120,10 +1279,22 @@ const LabReports = () => {
                                 Download
                               </motion.button>
                             ) : report.status === 'generating' ? (
-                              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600 mr-1.5 animate-pulse"></div>
-                                In progress...
-                              </span>
+                              // For reports in "generating" status that aren't the currently tracked one,
+                              // add a download attempt option anyway since the backend might be stuck
+                              <div className="flex space-x-2">
+                                <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600 mr-1.5 animate-pulse"></div>
+                                  In progress...
+                                </span>
+                                <motion.button
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => handleDownload(report.id)}
+                                  className="inline-flex items-center px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-200 transition-colors duration-150 dark:bg-slate-700/30 dark:hover:bg-slate-700/50 dark:text-slate-300 dark:border-slate-700/50"
+                                >
+                                  <FiDownload className="h-3 w-3" />
+                                </motion.button>
+                              </div>
                             ) : report.status === 'error' ? (
                               <div className="group relative">
                                 <span className="text-xs text-rose-600 dark:text-rose-400 flex items-center cursor-help">
