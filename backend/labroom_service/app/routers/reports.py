@@ -1,4 +1,5 @@
-# app/routers/reports.py
+// app/routers/reports.py - Updated code with all fixes
+
 import uuid
 import os
 import io
@@ -489,7 +490,7 @@ def create_line_chart(data: List[Dict[str, Any]], title: str, width=400, height=
         
         # Sort data by date
         try:
-            sorted_data = sorted(data, key=lambda x: x.get("date", ""))
+            sorted_trend = sorted(data, key=lambda x: x.get("date", ""))
         except (KeyError, TypeError) as e:
             drawing.add(String(width/2, height/2, "Data sorting error", 
                              fontSize=12, fontName="Helvetica", textAnchor="middle"))
@@ -504,8 +505,8 @@ def create_line_chart(data: List[Dict[str, Any]], title: str, width=400, height=
         
         # Extract values and dates safely
         try:
-            values = [d.get("count", 0) for d in sorted_data]
-            dates = [str(d.get("date", "")) for d in sorted_data]
+            values = [d.get("count", 0) for d in sorted_trend]
+            dates = [str(d.get("date", "")) for d in sorted_trend]
             
             if not values or all(v == 0 for v in values):
                 drawing.add(String(width/2, height/2, "No trend data available", 
@@ -1180,10 +1181,10 @@ async def generate_pdf_report(
             try:
                 conn = await get_connection()
                 
-                # Use a more robust query with a timestamp update
+                # Use a more robust query WITHOUT updated_at column
                 update_query = """
                     UPDATE lab_reports 
-                    SET file_path = $1, updated_at = NOW() 
+                    SET file_path = $1 
                     WHERE id = $2 
                     RETURNING id
                 """
@@ -1235,10 +1236,10 @@ async def generate_pdf_report(
                 
             error_message = f"error_{str(e)[:100]}"  # Truncate long error messages
             
-            # Use a more robust error update query
+            # Use a more robust error update query WITHOUT updated_at column
             error_update_query = """
                 UPDATE lab_reports 
-                SET file_path = $1, updated_at = NOW() 
+                SET file_path = $1
                 WHERE id = $2
             """
             
@@ -1745,6 +1746,7 @@ async def generate_txt_report(
         logger.debug("Updating database with file path")
         conn = await get_connection()
         try:
+            # Use update query WITHOUT updated_at field
             update_query = "UPDATE lab_reports SET file_path = $1 WHERE id = $2"
             await conn.execute(update_query, file_path, str(report_id))
         except Exception as db_error:
