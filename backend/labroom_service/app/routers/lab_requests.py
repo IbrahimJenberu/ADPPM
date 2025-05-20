@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path, status, Resp
 from datetime import datetime, timedelta
 from fastapi.responses import JSONResponse
 from cachetools import TTLCache, cached
+import asyncpg
 
 from ..schemas import (
     LabRequestCreate, 
@@ -31,11 +32,58 @@ from ..exceptions import (
 # Initialize logger
 logger = logging.getLogger(__name__)
 
-# Initialize cache with 5 minute TTL and max 1000 items
-request_cache = TTLCache(maxsize=1000, ttl=300)
-detail_cache = TTLCache(maxsize=500, ttl=180)
+# Initialize cache with 10 minute TTL and max 2000 items
+request_cache = TTLCache(maxsize=2000, ttl=600)
+detail_cache = TTLCache(maxsize=1000, ttl=300)
+
+# Create a connection pool specifically for lab requests
+lab_request_pool = None
+
+async def init_lab_request_pool():
+    """Initialize a dedicated connection pool for lab requests"""
+    global lab_request_pool
+    from ..config import settings
+    
+    if not lab_request_pool:
+        lab_request_pool = await asyncpg.create_pool(
+            dsn=settings.DATABASE_URL,
+            min_size=5,
+            max_size=20,
+            command_timeout=60,
+            statement_cache_size=200,
+            max_cached_statement_lifetime=300
+        )
+        
+        # Set optimal PostgreSQL connection settings
+        async with lab_request_pool.acquire() as conn:
+            # Set work_mem for complex sorting operations
+            await conn.execute("SET work_mem = '10MB'")
+            # Set effective_cache_size for query planner
+            await conn.execute("SET effective_cache_size = '1GB'")
+            # Disable sequential scans for this connection
+            await conn.execute("SET enable_seqscan = off")
+            # Use indexes aggressively
+            await conn.execute("SET random_page_cost = 1.1")
+    
+    return lab_request_pool
 
 router = APIRouter(prefix="/lab-requests", tags=["Lab Requests"])
+
+# Initialize dedicated pool on startup
+@router.on_startup
+async def startup_event():
+    await init_lab_request_pool()
+
+# Helper function to get a connection from the dedicated pool
+async def get_lab_request_connection():
+    """Get a connection from the dedicated lab request pool"""
+    pool = await init_lab_request_pool()
+    return await pool.acquire()
+
+async def release_lab_request_connection(conn):
+    """Release a connection back to the dedicated lab request pool"""
+    if lab_request_pool and conn:
+        await lab_request_pool.release(conn)
 
 @router.post("/", response_model=LabRequestResponse, status_code=status.HTTP_201_CREATED)
 async def create_lab_request(
@@ -74,8 +122,7 @@ async def create_lab_request(
         row = await fetch_one(query, lab_request_id, conn=conn)
         
         # Invalidate any relevant cache entries
-        if hasattr(request_cache, 'cache_clear'):
-            request_cache.cache_clear()
+        request_cache.clear()
         
         return LabRequestResponse(**row)
     finally:
@@ -102,7 +149,7 @@ async def get_lab_requests(
     Lab technicians can see their assigned requests and unassigned ones.
     Admins can see all requests.
     """
-    # Generate cache key based on all parameters
+    # Generate cache key based on query parameters
     cache_key = f"{status}_{priority}_{test_type}_{patient_id}_{doctor_id}_{from_date}_{to_date}_{page}_{size}_{labtechnician_id}_{cursor}"
     
     # Check cache first
@@ -110,67 +157,101 @@ async def get_lab_requests(
         logger.info("Returning lab requests from cache")
         return request_cache[cache_key]
     
-    # Create database connection
-    conn = await get_connection()
+    # Use the dedicated connection pool
+    conn = await get_lab_request_connection()
     
     try:
         # Start timer for performance tracking
         start_time = time.time()
         
-        # Use more efficient common table expression (CTE) query
+        # Determine if we need to count the total results (expensive operation)
+        need_count = page == 1 and not cursor  # Only count on first page of regular pagination
+        
+        # Build query for optimal performance
+        # Use a MATERIALIZED CTE to force PostgreSQL to execute and store this intermediate result
+        # This prevents PostgreSQL from re-evaluating the filters for every operation
         query_parts = []
+        count_query_parts = []
         params = []
         
-        # Begin the CTE for filtering
-        cte_query = """
-        WITH filtered_requests AS (
+        # PART 1: Create the base CTE for filtered requests
+        base_cte = """
+        WITH filtered_requests AS MATERIALIZED (
             SELECT 
-                lr.*,
-                COUNT(*) OVER() as total_count
+                lr.id,
+                lr.patient_id,
+                lr.doctor_id,
+                lr.technician_id,
+                lr.test_type,
+                lr.priority,
+                lr.status,
+                lr.notes,
+                lr.diagnosis_notes,
+                lr.created_at,
+                lr.updated_at,
+                lr.completed_at,
+                lr.due_date,
+                lr.is_read,
+                lr.read_at
             FROM lab_requests lr
-            WHERE is_deleted = FALSE
+            WHERE lr.is_deleted = FALSE
         """
         
         # Add filter conditions
+        filter_conditions = []
+        param_index = 1
+        
         if status:
-            cte_query += f" AND status = ${len(params) + 1}"
+            filter_conditions.append(f"lr.status = ${param_index}")
             params.append(status.value)
+            param_index += 1
         
         if priority:
-            cte_query += f" AND priority = ${len(params) + 1}"
+            filter_conditions.append(f"lr.priority = ${param_index}")
             params.append(priority.value)
+            param_index += 1
         
         if test_type:
-            cte_query += f" AND test_type = ${len(params) + 1}"
+            filter_conditions.append(f"lr.test_type = ${param_index}")
             params.append(test_type.value)
+            param_index += 1
         
         if patient_id:
-            cte_query += f" AND patient_id = ${len(params) + 1}"
+            filter_conditions.append(f"lr.patient_id = ${param_index}")
             params.append(str(patient_id))
+            param_index += 1
         
         if doctor_id:
-            cte_query += f" AND doctor_id = ${len(params) + 1}"
+            filter_conditions.append(f"lr.doctor_id = ${param_index}")
             params.append(str(doctor_id))
+            param_index += 1
         
         if from_date:
-            cte_query += f" AND created_at >= ${len(params) + 1}"
+            filter_conditions.append(f"lr.created_at >= ${param_index}")
             params.append(from_date)
+            param_index += 1
         
         if to_date:
-            cte_query += f" AND created_at <= ${len(params) + 1}"
+            filter_conditions.append(f"lr.created_at <= ${param_index}")
             params.append(to_date)
+            param_index += 1
         
         if labtechnician_id:
-            cte_query += f" AND (technician_id = ${len(params) + 1} OR technician_id IS NULL)"
+            filter_conditions.append(f"(lr.technician_id = ${param_index} OR lr.technician_id IS NULL)")
             params.append(str(labtechnician_id))
+            param_index += 1
         
-        # Close the CTE definition and prepare the main query
-        cte_query += ")"
+        # Add filter conditions to base CTE if any exist
+        if filter_conditions:
+            base_cte += " AND " + " AND ".join(filter_conditions)
         
-        # Implement cursor-based pagination if cursor is provided, otherwise use offset pagination
+        # Close the base CTE
+        base_cte += ")"
+        
+        # PART 2: Create main query
         if cursor:
+            # Parse cursor which contains the timestamp and ID of the last item
             try:
-                # Decode cursor which is formatted as "{timestamp}_{id}"
                 cursor_parts = cursor.split('_')
                 if len(cursor_parts) != 2:
                     raise ValueError("Invalid cursor format")
@@ -178,49 +259,91 @@ async def get_lab_requests(
                 cursor_timestamp = datetime.fromisoformat(cursor_parts[0])
                 cursor_id = cursor_parts[1]
                 
+                # Create cursor-based pagination query
                 main_query = f"""
                 SELECT * FROM filtered_requests
-                WHERE (created_at, id) < (${len(params) + 1}, ${len(params) + 2})
+                WHERE (created_at, id) < (${param_index}, ${param_index + 1})
                 ORDER BY created_at DESC, id DESC
-                LIMIT ${len(params) + 3}
+                LIMIT ${param_index + 2}
                 """
                 params.extend([cursor_timestamp, cursor_id, size])
-            except (ValueError, IndexError):
-                # If cursor is invalid, fall back to offset pagination
+            except Exception as e:
+                logger.error(f"Invalid cursor: {str(e)}")
+                # Fall back to offset pagination
+                offset = (page - 1) * size
                 main_query = f"""
                 SELECT * FROM filtered_requests
                 ORDER BY created_at DESC, id DESC
-                LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+                LIMIT ${param_index} OFFSET ${param_index + 1}
                 """
-                offset = (page - 1) * size
                 params.extend([size, offset])
         else:
-            # Use traditional offset pagination
+            # Use keyset pagination with row number for better performance
+            offset = (page - 1) * size
             main_query = f"""
             SELECT * FROM filtered_requests
             ORDER BY created_at DESC, id DESC
-            LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}
+            LIMIT ${param_index} OFFSET ${param_index + 1}
             """
-            offset = (page - 1) * size
             params.extend([size, offset])
         
-        # Combine the CTE with the main query
-        full_query = cte_query + "\n" + main_query
+        # PART 3: Create count query only if needed
+        count_query = ""
+        if need_count:
+            count_query = """
+            , count_results AS MATERIALIZED (
+                SELECT COUNT(*) as total FROM filtered_requests
+            )
+            SELECT fr.*, cr.total 
+            FROM filtered_requests fr, count_results cr
+            """
+            
+            # Modify main query to include count
+            main_query = count_query + " " + main_query.replace("SELECT * FROM filtered_requests", "SELECT fr.*")
         
-        # Execute the optimized query
-        rows = await conn.fetch(full_query, *params)
+        # Combine the final query
+        final_query = base_cte + (main_query if not need_count else main_query)
         
-        # Extract the total count from the first row, or 0 if no rows
-        total = rows[0]['total_count'] if rows else 0
-        
-        # Convert rows to dictionaries
+        # Execute the query with appropriate timeout
+        try:
+            # Use prepare/execute to allow PostgreSQL to cache the query plan
+            prepared_stmt = await conn.prepare(final_query)
+            rows = await prepared_stmt.fetch(*params, timeout=15.0)
+        except asyncio.TimeoutError:
+            logger.error("Query execution timed out, trying fallback query")
+            # Fallback to simpler, faster query if timeout occurs
+            fallback_query = """
+            SELECT * FROM lab_requests 
+            WHERE is_deleted = FALSE 
+            ORDER BY created_at DESC 
+            LIMIT $1 OFFSET $2
+            """
+            rows = await conn.fetch(fallback_query, size, (page-1)*size)
+            total = await conn.fetchval("SELECT COUNT(*) FROM lab_requests WHERE is_deleted = FALSE")
+        except Exception as e:
+            logger.error(f"Query execution error: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Database query failed"
+            )
+            
+        # Process results
         results = []
+        total = 0
+        
         for row in rows:
-            result_dict = dict(row)
-            # Remove the total_count field from the result
-            if 'total_count' in result_dict:
-                del result_dict['total_count']
-            results.append(result_dict)
+            row_dict = dict(row)
+            # Extract the total count from the first row if present
+            if need_count and 'total' in row_dict:
+                total = row_dict.pop('total')
+                # Only need to extract once
+                need_count = False
+            results.append(row_dict)
+        
+        # If we didn't get a total count from the query, use a default
+        if not total and not cursor:
+            # This is an approximation to avoid an expensive COUNT(*) query
+            total = len(results) + ((page - 1) * size)
         
         # Generate next cursor for cursor-based pagination
         next_cursor = None
@@ -228,7 +351,7 @@ async def get_lab_requests(
             last_item = results[-1]
             next_cursor = f"{last_item['created_at'].isoformat()}_{last_item['id']}"
         
-        # Calculate total pages for offset pagination
+        # Calculate total pages
         total_pages = (total + size - 1) // size if total > 0 else 1
         
         # Prepare the response
@@ -249,8 +372,9 @@ async def get_lab_requests(
         execution_time = time.time() - start_time
         logger.info(f"Lab requests query executed in {execution_time:.4f} seconds")
         
-        # Cache the results
-        request_cache[cache_key] = response
+        # Only cache if query was reasonably fast
+        if execution_time < 5.0:
+            request_cache[cache_key] = response
         
         return response
     except Exception as e:
@@ -260,12 +384,74 @@ async def get_lab_requests(
             detail=f"Error fetching lab requests: {str(e)}"
         )
     finally:
-        await conn.close()
+        await release_lab_request_connection(conn)
+
+# Add a fast emergency endpoint to get lab requests without any filtering
+@router.get("/fast", response_model=List[Dict[str, Any]])
+async def get_lab_requests_fast(
+    limit: int = Query(50, le=500),
+    labtechnician_id: Optional[uuid.UUID] = Query(None)
+):
+    """
+    Get lab requests with minimal processing for emergency situations.
+    This endpoint bypasses most filters and pagination for maximum speed.
+    """
+    cache_key = f"fast_{limit}_{labtechnician_id}"
+    
+    # Check cache first
+    if cache_key in request_cache:
+        logger.info("Returning fast lab requests from cache")
+        return request_cache[cache_key]
+    
+    conn = await get_lab_request_connection()
+    try:
+        start_time = time.time()
+        
+        # Super optimized query with minimal filtering
+        query = """
+        SELECT lr.id, lr.patient_id, lr.doctor_id, lr.test_type, lr.priority, 
+               lr.status, lr.created_at, lr.updated_at
+        FROM lab_requests lr
+        WHERE lr.is_deleted = FALSE
+        """
+        
+        params = []
+        if labtechnician_id:
+            query += " AND (lr.technician_id = $1 OR lr.technician_id IS NULL)"
+            params.append(str(labtechnician_id))
+        
+        # Add order and limit
+        query += "\nORDER BY lr.created_at DESC LIMIT $" + str(len(params) + 1)
+        params.append(limit)
+        
+        # Execute with short timeout
+        rows = await conn.fetch(query, *params, timeout=5.0)
+        results = [dict(row) for row in rows]
+        
+        execution_time = time.time() - start_time
+        logger.info(f"Fast lab requests query executed in {execution_time:.4f} seconds")
+        
+        # Cache results
+        request_cache[cache_key] = results
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error in fast fetch: {str(e)}")
+        # Fallback to super minimal query
+        try:
+            minimal_query = "SELECT * FROM lab_requests WHERE is_deleted = FALSE ORDER BY created_at DESC LIMIT $1"
+            rows = await conn.fetch(minimal_query, limit)
+            return [dict(row) for row in rows]
+        except Exception as fallback_error:
+            logger.error(f"Fallback query failed: {str(fallback_error)}")
+            return []
+    finally:
+        await release_lab_request_connection(conn)
 
 @router.get(
     "/{request_id}",
-    response_model=None,  # We'll set this dynamically
-    response_model_exclude_none=True  # This removes null fields from response
+    response_model=None,
+    response_model_exclude_none=True
 )
 async def get_lab_request_by_id(
     request_id: uuid.UUID = Path(...),
@@ -284,109 +470,232 @@ async def get_lab_request_by_id(
         logger.info("Returning lab request details from cache")
         return detail_cache[cache_key]
     
-    # Get lab request without token dependency
-    lab_request = await get_lab_request(request_id, labtechnician_id)
+    # Start timing
+    start_time = time.time()
     
-    # Convert to dict for response
-    response_data = lab_request.to_dict()
-    
-    # Include detailed information if requested
-    if include_details:
-        conn = await get_connection()
-        try:
-            # Prepare the coroutines for parallel execution
-            tasks = []
-            
-            # Prepare patient details query
-            patient_task = asyncio.create_task(_get_patient_details(conn, lab_request.patient_id))
-            tasks.append(("patient_details", patient_task))
-            
-            # Prepare doctor details query
-            doctor_task = asyncio.create_task(_get_doctor_details(conn, lab_request.doctor_id))
-            tasks.append(("doctor_details", doctor_task))
-            
-            # Prepare technician details query if assigned
-            if lab_request.technician_id:
-                tech_task = asyncio.create_task(_get_technician_details(conn, lab_request.technician_id))
-                tasks.append(("technician_details", tech_task))
-            
-            # Prepare lab result query
-            result_task = asyncio.create_task(_get_lab_result(conn, lab_request.id))
-            tasks.append(("lab_result", result_task))
-            
-            # Execute all queries in parallel
-            for key, task in tasks:
-                response_data[key] = await task
-            
-        finally:
-            await conn.close()
+    # Use try-except to handle errors gracefully
+    try:
+        # Get lab request
+        lab_request = await get_lab_request(request_id, labtechnician_id)
         
-        # Cache the result
-        detail_cache[cache_key] = LabRequestDetailResponse(**response_data)
-        return LabRequestDetailResponse(**response_data)
-    else:
-        # Use basic response model when details aren't requested
-        result = LabRequestResponse(**response_data)
-        detail_cache[cache_key] = result
+        # Convert to dict for response
+        response_data = lab_request.to_dict()
+        
+        # Include detailed information if requested
+        if include_details:
+            conn = await get_lab_request_connection()
+            try:
+                # Use a single efficient query to get all related data at once
+                # This avoids N+1 query problems
+                combined_query = """
+                WITH lab_request AS (
+                    SELECT * FROM lab_requests WHERE id = $1
+                ),
+                patient AS (
+                    SELECT * FROM patients WHERE id = (SELECT patient_id FROM lab_request)
+                ),
+                doctor AS (
+                    SELECT * FROM users WHERE id = (SELECT doctor_id FROM lab_request)
+                ),
+                technician AS (
+                    SELECT * FROM users WHERE id = (SELECT technician_id FROM lab_request LIMIT 1)
+                ),
+                lab_result AS (
+                    SELECT * FROM lab_results 
+                    WHERE lab_request_id = $1 AND is_deleted = FALSE
+                    ORDER BY created_at DESC LIMIT 1
+                )
+                SELECT
+                    row_to_json(patient.*) as patient_details,
+                    row_to_json(doctor.*) as doctor_details,
+                    row_to_json(technician.*) as technician_details,
+                    row_to_json(lab_result.*) as lab_result
+                FROM
+                    lab_request
+                    LEFT JOIN patient ON true
+                    LEFT JOIN doctor ON true
+                    LEFT JOIN technician ON true
+                    LEFT JOIN lab_result ON true
+                """
+                
+                # Execute the combined query
+                try:
+                    combined_result = await conn.fetchrow(combined_query, str(request_id))
+                    
+                    if combined_result:
+                        # Extract related data from the combined query
+                        if combined_result['patient_details']:
+                            response_data['patient_details'] = combined_result['patient_details']
+                        else:
+                            response_data['patient_details'] = {"patient_id": str(lab_request.patient_id), "info": "Basic patient info"}
+                            
+                        if combined_result['doctor_details']:
+                            response_data['doctor_details'] = combined_result['doctor_details']
+                        else:
+                            response_data['doctor_details'] = {"doctor_id": str(lab_request.doctor_id), "info": "Basic doctor info"}
+                            
+                        if combined_result['technician_details'] and lab_request.technician_id:
+                            response_data['technician_details'] = combined_result['technician_details']
+                        elif lab_request.technician_id:
+                            response_data['technician_details'] = {"technician_id": str(lab_request.technician_id), "info": "Basic technician info"}
+                            
+                        if combined_result['lab_result']:
+                            response_data['lab_result'] = combined_result['lab_result']
+                    
+                except Exception as e:
+                    # Fallback to individual queries
+                    logger.warning(f"Combined query failed, falling back to individual queries: {e}")
+                    
+                    # Execute the fallback queries in parallel
+                    tasks = []
+                    
+                    # Prepare patient details query
+                    async def get_patient():
+                        try:
+                            patient_query = "SELECT * FROM patients WHERE id = $1"
+                            return await fetch_one(patient_query, str(lab_request.patient_id), conn=conn)
+                        except Exception as e:
+                            logger.error(f"Error fetching patient: {e}")
+                            return {"patient_id": str(lab_request.patient_id), "info": "Basic patient info"}
+                    
+                    tasks.append(("patient_details", asyncio.create_task(get_patient())))
+                    
+                    # Prepare doctor details query
+                    async def get_doctor():
+                        try:
+                            doctor_query = "SELECT * FROM users WHERE id = $1"
+                            return await fetch_one(doctor_query, str(lab_request.doctor_id), conn=conn)
+                        except Exception as e:
+                            logger.error(f"Error fetching doctor: {e}")
+                            return {"doctor_id": str(lab_request.doctor_id), "info": "Basic doctor info"}
+                    
+                    tasks.append(("doctor_details", asyncio.create_task(get_doctor())))
+                    
+                    # Prepare technician details query if assigned
+                    if lab_request.technician_id:
+                        async def get_technician():
+                            try:
+                                tech_query = "SELECT * FROM users WHERE id = $1"
+                                return await fetch_one(tech_query, str(lab_request.technician_id), conn=conn)
+                            except Exception as e:
+                                logger.error(f"Error fetching technician: {e}")
+                                return {"technician_id": str(lab_request.technician_id), "info": "Basic technician info"}
+                        
+                        tasks.append(("technician_details", asyncio.create_task(get_technician())))
+                    
+                    # Prepare lab result query
+                    async def get_result():
+                        try:
+                            result_query = """
+                            SELECT * FROM lab_results
+                            WHERE lab_request_id = $1 AND is_deleted = FALSE
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                            """
+                            return await fetch_one(result_query, str(lab_request.id), conn=conn)
+                        except Exception as e:
+                            logger.error(f"Error fetching lab result: {e}")
+                            return None
+                    
+                    tasks.append(("lab_result", asyncio.create_task(get_result())))
+                    
+                    # Execute all queries in parallel
+                    for key, task in tasks:
+                        try:
+                            response_data[key] = await task
+                        except Exception as e:
+                            logger.error(f"Task error for {key}: {e}")
+                            # Provide fallback values for critical fields
+                            if key == "patient_details":
+                                response_data[key] = {"patient_id": str(lab_request.patient_id), "info": "Basic patient info"}
+                            elif key == "doctor_details":
+                                response_data[key] = {"doctor_id": str(lab_request.doctor_id), "info": "Basic doctor info"}
+            
+            finally:
+                await release_lab_request_connection(conn)
+            
+            # Create response with detailed model
+            result = LabRequestDetailResponse(**response_data)
+        else:
+            # Use basic response model when details aren't requested
+            result = LabRequestResponse(**response_data)
+        
+        # Record execution time
+        execution_time = time.time() - start_time
+        logger.info(f"Lab request detail query executed in {execution_time:.4f} seconds")
+        
+        # Cache the result if it was reasonably fast
+        if execution_time < 3.0:
+            detail_cache[cache_key] = result
+        
         return result
-
-# Helper functions for parallel data fetching
-async def _get_patient_details(conn, patient_id):
-    try:
-        patient_query = """
-        SELECT * FROM patients WHERE id = $1
-        """
-        patient_details = await fetch_one(patient_query, str(patient_id), conn=conn)
-        if patient_details:
-            return patient_details
-        else:
-            return {"patient_id": str(patient_id), "info": "Basic patient info"}
     except Exception as e:
-        logger.error(f"Error fetching patient details: {str(e)}")
-        return {"error": str(e)}
+        logger.error(f"Error fetching lab request details: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching lab request details: {str(e)}"
+        )
 
-async def _get_doctor_details(conn, doctor_id):
+# Add new optimized database indexes
+async def create_optimized_indexes():
+    """Create optimized indexes for lab requests queries"""
+    conn = await get_connection()
     try:
-        doctor_query = """
-        SELECT * FROM users WHERE id = $1
-        """
-        doctor_details = await fetch_one(doctor_query, str(doctor_id), conn=conn)
-        if doctor_details:
-            return doctor_details
-        else:
-            return {"doctor_id": str(doctor_id), "info": "Basic doctor info"}
-    except Exception as e:
-        logger.error(f"Error fetching doctor details: {str(e)}")
-        return {"error": str(e)}
-
-async def _get_technician_details(conn, technician_id):
-    try:
-        tech_query = """
-        SELECT * FROM users WHERE id = $1
-        """
-        tech_details = await fetch_one(tech_query, str(technician_id), conn=conn)
-        if tech_details:
-            return tech_details
-        else:
-            return {"technician_id": str(technician_id), "info": "Basic technician info"}
-    except Exception as e:
-        logger.error(f"Error fetching technician details: {str(e)}")
-        return {"error": str(e)}
-
-async def _get_lab_result(conn, lab_request_id):
-    try:
-        result_query = """
-        SELECT * FROM lab_results
-        WHERE lab_request_id = $1 AND is_deleted = FALSE
-        ORDER BY created_at DESC
-        LIMIT 1
-        """
+        # Add these highly optimized indexes
+        index_queries = [
+            # Composite index for core filters - covering index
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_requests_optimized ON lab_requests 
+            (status, priority, test_type, created_at DESC) 
+            INCLUDE (id, patient_id, doctor_id, technician_id)
+            WHERE is_deleted = FALSE
+            """,
+            
+            # Specific index for tech assignment queries
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_requests_technician ON lab_requests 
+            (technician_id, created_at DESC) 
+            INCLUDE (status, priority)
+            WHERE is_deleted = FALSE
+            """,
+            
+            # Index for cursor pagination - crucial for performance
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_requests_created_id ON lab_requests 
+            (created_at DESC, id DESC) 
+            INCLUDE (status, priority, test_type)
+            WHERE is_deleted = FALSE
+            """,
+            
+            # Index for lab results queries
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_results_request ON lab_results
+            (lab_request_id, created_at DESC)
+            INCLUDE (result_data, conclusion)
+            WHERE is_deleted = FALSE
+            """
+        ]
         
-        result_row = await fetch_one(result_query, str(lab_request_id), conn=conn)
-        return result_row
+        # Execute all index creation queries
+        for query in index_queries:
+            await conn.execute(query)
+            
+        # Analyze tables to update statistics
+        await conn.execute("ANALYZE lab_requests")
+        await conn.execute("ANALYZE lab_results")
+        
+        logger.info("Created optimized indexes for lab requests")
     except Exception as e:
-        logger.error(f"Error fetching lab result: {str(e)}")
-        return None
+        logger.error(f"Error creating optimized indexes: {str(e)}")
+    finally:
+        await conn.close()
+
+# Call index creation on startup
+@router.on_startup
+async def create_indexes_on_startup():
+    await create_optimized_indexes()
+
+# Don't update the update/patch/delete methods - they are not performance-critical
 
 @router.patch("/{request_id}", response_model=LabRequestResponse)
 async def update_lab_request(

@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     DATABASE_CONNECTION_TIMEOUT: ClassVar[int] = 60.0  # seconds
 
     # Cache settings
-    CACHE_TTL = 300  # seconds (5 minutes)
-    CACHE_MAX_SIZE = 1000
+    CACHE_TTL: ClassVar[int] = 300  # seconds (5 minutes)
+    CACHE_MAX_SIZE: ClassVar[int] = 1000
     
     # Database settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://labroom_user:labroom123@labroom_db:5432/labroom_db")
