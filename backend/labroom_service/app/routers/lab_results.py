@@ -2,7 +2,9 @@ import uuid
 import os
 import shutil
 import json
-from typing import Dict, List, Any, Optional
+import time
+import asyncio
+from typing import Dict, List, Any, Optional, Union
 from fastapi import (
     APIRouter, 
     Depends, 
@@ -12,12 +14,15 @@ from fastapi import (
     status, 
     UploadFile, 
     File,
-    BackgroundTasks
+    BackgroundTasks,
+    Request,
+    Response
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiofiles
 import aiofiles.os
 import logging
+from cachetools import TTLCache, cached
 
 from ..schemas import (
     LabResultCreate, 
@@ -44,6 +49,123 @@ from ..config import settings
 router = APIRouter(prefix="/lab-results", tags=["Lab Results"])
 
 logger = logging.getLogger(__name__)
+
+# Initialize caches with appropriate TTL
+results_cache = TTLCache(maxsize=1000, ttl=300)  # 5 minute TTL
+detail_cache = TTLCache(maxsize=500, ttl=180)    # 3 minute TTL
+images_cache = TTLCache(maxsize=500, ttl=180)     # 3 minute TTL
+
+# Create a dedicated connection pool for lab results
+lab_results_pool = None
+
+async def init_lab_results_pool():
+    """Initialize a dedicated connection pool for lab results"""
+    global lab_results_pool
+    import asyncpg
+    
+    if not lab_results_pool:
+        try:
+            lab_results_pool = await asyncpg.create_pool(
+                dsn=settings.DATABASE_URL,
+                min_size=5,
+                max_size=20,
+                command_timeout=60,
+            )
+            
+            # Set optimal PostgreSQL settings
+            if lab_results_pool:
+                async with lab_results_pool.acquire() as conn:
+                    # Set work_mem for complex sorting operations
+                    await conn.execute("SET work_mem = '10MB'")
+                    # Use indexes aggressively
+                    await conn.execute("SET random_page_cost = 1.1")
+                    
+            logger.info("Lab results pool initialized successfully")
+            return lab_results_pool
+        except Exception as e:
+            logger.error(f"Error initializing lab results pool: {str(e)}")
+            return None
+    
+    return lab_results_pool
+
+async def get_lab_results_connection():
+    """Get a connection from the lab results pool or fall back to default"""
+    pool = await init_lab_results_pool()
+    if pool:
+        return await pool.acquire()
+    else:
+        return await get_connection()
+
+async def release_lab_results_connection(conn):
+    """Release a connection back to the pool"""
+    if lab_results_pool and conn:
+        try:
+            await lab_results_pool.release(conn)
+        except Exception as e:
+            logger.error(f"Error releasing connection: {str(e)}")
+
+async def create_optimized_indexes():
+    """Create optimized indexes for lab results queries"""
+    conn = await get_connection()
+    try:
+        # Add highly optimized indexes
+        index_queries = [
+            # Composite index for lab results with request info
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_results_request_id ON lab_results 
+            (lab_request_id, created_at DESC)
+            WHERE is_deleted = FALSE
+            """,
+            
+            # Index on result creation time
+            """
+            CREATE INDEX IF NOT EXISTS idx_lab_results_created_at ON lab_results 
+            (created_at DESC)
+            WHERE is_deleted = FALSE
+            """,
+            
+            # Create index for images
+            """
+            CREATE INDEX IF NOT EXISTS idx_result_images_result_id ON result_images
+            (result_id, created_at DESC)
+            """
+        ]
+        
+        # Create the result_images table if it doesn't exist
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS result_images (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            result_id UUID NOT NULL REFERENCES lab_results(id) ON DELETE CASCADE,
+            file_path TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_size BIGINT NOT NULL,
+            file_type TEXT NOT NULL,
+            description TEXT,
+            uploaded_by UUID NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )
+        """
+        
+        await conn.execute(create_table_query)
+        
+        # Execute all index creation queries
+        for query in index_queries:
+            try:
+                await conn.execute(query)
+            except Exception as e:
+                logger.warning(f"Index creation query failed: {str(e)}")
+            
+        logger.info("Created optimized indexes for lab results")
+    except Exception as e:
+        logger.error(f"Error creating optimized indexes: {str(e)}")
+    finally:
+        await conn.close()
+
+# Initialize lab results system
+async def startup_event():
+    """Initialize the lab results module"""
+    await init_lab_results_pool()
+    await create_optimized_indexes()
 
 @router.post("/", response_model=LabResultResponse, status_code=status.HTTP_201_CREATED)
 async def create_lab_result(
@@ -109,7 +231,7 @@ async def create_lab_result(
             detail="Not authorized to create results for this lab request"
         )
 
-    conn = await get_connection()
+    conn = await get_lab_results_connection()
     
     try:
         async with conn.transaction():
@@ -228,6 +350,11 @@ async def create_lab_result(
                 except json.JSONDecodeError:
                     result_row["result_data"] = {}
             
+            # Clear all caches when creating a new result
+            results_cache.clear()
+            detail_cache.clear()
+            images_cache.clear()
+            
             return LabResultResponse(**result_row)
     except Exception as e:
         logger.error(f"Error creating lab result: {str(e)}")
@@ -236,71 +363,150 @@ async def create_lab_result(
             detail=f"Failed to create lab result: {str(e)}"
         )
     finally:
-        await conn.close()
+        await release_lab_results_connection(conn)
 
 @router.get("/", response_model=List[LabResultResponse])
 async def get_all_lab_results(
+    request: Request,
     lab_technician_id: uuid.UUID = Query(..., description="Lab Technician ID from frontend"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     test_type: Optional[str] = Query(None, description="Filter by test type"),
     start_date: Optional[datetime] = Query(None, description="Filter by start date"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date"),
-    status: Optional[str] = Query(None, description="Filter by lab request status")
+    status: Optional[str] = Query(None, description="Filter by lab request status"),
+    cursor: Optional[str] = Query(None, description="Cursor for pagination"),
 ):
     """
     Get all lab results with pagination and filtering.
     This endpoint returns a list of lab results that can be filtered by various parameters.
     """
-    # Calculate offset for pagination
-    offset = (page - 1) * limit
+    # Generate cache key based on all parameters
+    cache_key = f"{lab_technician_id}_{page}_{limit}_{test_type}_{start_date}_{end_date}_{status}_{cursor}"
     
-    # Prepare query parameters
-    query_params = []
-    query_values = []
+    # Check cache first
+    if cache_key in results_cache:
+        logger.info("Returning lab results from cache")
+        return results_cache[cache_key]
     
-    # Base query with JOIN to get test_type from lab_requests
-    query = """
-        SELECT lr.*, req.test_type, req.status as request_status
-        FROM lab_results lr
-        JOIN lab_requests req ON lr.lab_request_id = req.id
-        WHERE lr.is_deleted = false
-    """
+    # Start timing for performance monitoring
+    start_time = time.time()
     
-    # Add filters if provided
-    if test_type:
-        query_params.append(f"req.test_type = ${len(query_params) + 1}")
-        query_values.append(test_type)
+    # Get a database connection
+    conn = await get_lab_results_connection()
     
-    if status:
-        query_params.append(f"req.status = ${len(query_params) + 1}")
-        query_values.append(status)
-    
-    if start_date:
-        query_params.append(f"lr.created_at >= ${len(query_params) + 1}")
-        query_values.append(start_date)
-    
-    if end_date:
-        query_params.append(f"lr.created_at <= ${len(query_params) + 1}")
-        query_values.append(end_date)
-    
-    # Add WHERE clause if we have filters
-    if query_params:
-        query += " AND " + " AND ".join(query_params)
-    
-    # Add order by and pagination
-    query += " ORDER BY lr.created_at DESC LIMIT $" + str(len(query_values) + 1) + " OFFSET $" + str(len(query_values) + 2)
-    query_values.extend([limit, offset])
-    
-    # Execute query
-    conn = await get_connection()
     try:
-        rows = await conn.fetch(query, *query_values)
+        # Prepare query parameters
+        where_clauses = ["lr.is_deleted = false"]
+        params = []
+        param_index = 1
         
-        # Construct response
+        # Add filters if provided
+        if test_type:
+            where_clauses.append(f"req.test_type = ${param_index}")
+            params.append(test_type)
+            param_index += 1
+        
+        if status:
+            where_clauses.append(f"req.status = ${param_index}")
+            params.append(status)
+            param_index += 1
+        
+        if start_date:
+            where_clauses.append(f"lr.created_at >= ${param_index}")
+            params.append(start_date)
+            param_index += 1
+        
+        if end_date:
+            where_clauses.append(f"lr.created_at <= ${param_index}")
+            params.append(end_date)
+            param_index += 1
+        
+        # Build optimized query with cursor-based pagination
+        # Use Common Table Expression (CTE) for better query planning
+        if cursor:
+            try:
+                # Parse cursor which contains the timestamp and ID of the last item
+                cursor_parts = cursor.split('_')
+                if len(cursor_parts) != 2:
+                    raise ValueError("Invalid cursor format")
+                
+                cursor_timestamp = datetime.fromisoformat(cursor_parts[0])
+                cursor_id = cursor_parts[1]
+                
+                # Build CTE query with cursor-based pagination
+                query = f"""
+                WITH lab_results_filtered AS (
+                    SELECT 
+                        lr.id, lr.lab_request_id, lr.result_data, lr.conclusion, 
+                        lr.image_paths, lr.created_at, lr.updated_at,
+                        req.test_type, req.status as request_status
+                    FROM lab_results lr
+                    JOIN lab_requests req ON lr.lab_request_id = req.id
+                    WHERE {' AND '.join(where_clauses)}
+                    AND (lr.created_at, lr.id) < (${param_index}, ${param_index + 1})
+                    ORDER BY lr.created_at DESC, lr.id DESC
+                    LIMIT ${param_index + 2}
+                )
+                SELECT * FROM lab_results_filtered
+                """
+                params.extend([cursor_timestamp, cursor_id, limit])
+                param_index += 3
+            except Exception as e:
+                logger.error(f"Invalid cursor: {str(e)}")
+                # Fall back to offset pagination
+                offset = (page - 1) * limit
+                query = f"""
+                SELECT 
+                    lr.id, lr.lab_request_id, lr.result_data, lr.conclusion, 
+                    lr.image_paths, lr.created_at, lr.updated_at,
+                    req.test_type, req.status as request_status
+                FROM lab_results lr
+                JOIN lab_requests req ON lr.lab_request_id = req.id
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY lr.created_at DESC, lr.id DESC
+                LIMIT ${param_index} OFFSET ${param_index + 1}
+                """
+                params.extend([limit, offset])
+                param_index += 2
+        else:
+            # Use offset pagination for first page or when cursor is not provided
+            offset = (page - 1) * limit
+            query = f"""
+            SELECT 
+                lr.id, lr.lab_request_id, lr.result_data, lr.conclusion, 
+                lr.image_paths, lr.created_at, lr.updated_at,
+                req.test_type, req.status as request_status
+            FROM lab_results lr
+            JOIN lab_requests req ON lr.lab_request_id = req.id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY lr.created_at DESC, lr.id DESC
+            LIMIT ${param_index} OFFSET ${param_index + 1}
+            """
+            params.extend([limit, offset])
+            param_index += 2
+        
+        # Use prepared statement for better performance
+        try:
+            stmt = await conn.prepare(query)
+            rows = await stmt.fetch(*params)
+        except Exception as e:
+            logger.error(f"Error executing query: {str(e)}")
+            # Fallback to simpler query if the optimized one fails
+            fallback_query = """
+            SELECT lr.*, NULL as test_type, NULL as request_status
+            FROM lab_results lr
+            WHERE lr.is_deleted = false
+            ORDER BY lr.created_at DESC
+            LIMIT $1 OFFSET $2
+            """
+            rows = await conn.fetch(fallback_query, limit, (page - 1) * limit)
+        
+        # Process results
         results = []
         for row in rows:
-            result_data = row.get("result_data", "{}")
+            row_dict = dict(row)
+            result_data = row_dict.get("result_data", "{}")
             
             # Parse JSON string to dict if needed
             if isinstance(result_data, str):
@@ -309,35 +515,24 @@ async def get_all_lab_results(
                 except json.JSONDecodeError:
                     result_data = {}
             
-            # Create lab result object
-            lab_result = {
-                "id": row["id"],
-                "lab_request_id": row["lab_request_id"],
-                "result_data": result_data,
-                "conclusion": row.get("conclusion"),
-                "image_paths": row.get("image_paths", []),
-                "created_at": row["created_at"],
-                "updated_at": row["updated_at"]
-            }
+            row_dict["result_data"] = result_data
             
-            results.append(LabResultResponse(**lab_result))
+            # Create lab result object
+            results.append(LabResultResponse(**row_dict))
         
-        # Get total count for pagination info (optional)
-        count_query = """
-            SELECT COUNT(*) 
-            FROM lab_results lr
-            JOIN lab_requests req ON lr.lab_request_id = req.id
-            WHERE lr.is_deleted = false
-        """
+        # Generate next cursor for cursor-based pagination
+        next_cursor = None
+        if results and len(results) == limit:  # If we have a full page
+            last_item = results[-1]
+            next_cursor = f"{last_item.created_at.isoformat()}_{last_item.id}"
         
-        # Add the same filters to count query
-        if query_params:
-            count_query += " AND " + " AND ".join(query_params)
+        # Record execution time for performance monitoring
+        execution_time = time.time() - start_time
+        logger.info(f"Lab results query executed in {execution_time:.4f} seconds")
         
-        total = await conn.fetchval(count_query, *query_values[:-2])  # Exclude limit and offset
-        
-        # You could return pagination info if needed
-        # return {"results": results, "total": total, "page": page, "limit": limit}
+        # Cache the results if query was reasonably fast
+        if execution_time < 5.0:
+            results_cache[cache_key] = results
         
         return results
     except Exception as e:
@@ -347,112 +542,226 @@ async def get_all_lab_results(
             detail=f"Failed to fetch lab results: {str(e)}"
         )
     finally:
-        await conn.close()
+        await release_lab_results_connection(conn)
+
+@router.get("/fast", response_model=List[LabResultResponse])
+async def get_lab_results_fast(
+    limit: int = Query(50, le=500),
+    lab_technician_id: Optional[uuid.UUID] = Query(None)
+):
+    """
+    Get lab results with minimal processing for emergency situations.
+    This endpoint bypasses most filters and pagination for maximum speed.
+    """
+    cache_key = f"fast_{limit}_{lab_technician_id}"
+    
+    # Check cache first
+    if cache_key in results_cache:
+        logger.info("Returning fast lab results from cache")
+        return results_cache[cache_key]
+    
+    conn = await get_lab_results_connection()
+    try:
+        start_time = time.time()
+        
+        # Super optimized query with minimal filtering
+        query = """
+        SELECT lr.id, lr.lab_request_id, lr.conclusion, lr.created_at, lr.updated_at
+        FROM lab_results lr
+        WHERE lr.is_deleted = FALSE
+        ORDER BY lr.created_at DESC LIMIT $1
+        """
+        
+        # Execute with short timeout
+        rows = await conn.fetch(query, limit, timeout=5.0)
+        
+        # Process results
+        results = []
+        for row in rows:
+            row_dict = dict(row)
+            
+            # Create result with minimal data
+            row_dict["result_data"] = {}  # Skip loading result data for speed
+            row_dict["image_paths"] = []  # Skip loading images for speed
+            
+            results.append(LabResultResponse(**row_dict))
+        
+        execution_time = time.time() - start_time
+        logger.info(f"Fast lab results query executed in {execution_time:.4f} seconds")
+        
+        # Cache results
+        results_cache[cache_key] = results
+        
+        return results
+    except Exception as e:
+        logger.error(f"Error in fast fetch: {str(e)}")
+        # Fallback to super minimal query
+        try:
+            minimal_query = "SELECT * FROM lab_results WHERE is_deleted = FALSE ORDER BY created_at DESC LIMIT $1"
+            rows = await conn.fetch(minimal_query, limit)
+            return [LabResultResponse(**dict(row)) for row in rows]
+        except Exception as fallback_error:
+            logger.error(f"Fallback query failed: {str(fallback_error)}")
+            return []
+    finally:
+        await release_lab_results_connection(conn)
 
 @router.get("/{result_id}", response_model=LabResultDetailResponse)
 async def get_lab_result_by_id(
     result_id: uuid.UUID = Path(...),
     include_details: bool = Query(False),
-    lab_technician_id: uuid.UUID = Query(..., description="Lab Technician ID from frontend")
+    lab_technician_id: uuid.UUID = Query(..., description="Lab Technician ID from frontend"),
+    response: Response = None
 ):
     """
     Get lab result details with technician authorization.
     This endpoint returns the lab result data and optionally includes related details.
     """
-    lab_result = await get_lab_result(result_id)
+    # Generate cache key
+    cache_key = f"{result_id}_{include_details}_{lab_technician_id}"
     
-    # Verify technician association or doctor association
-    conn = await get_connection()
+    # Check if in cache first
+    if cache_key in detail_cache:
+        logger.info("Returning lab result details from cache")
+        return detail_cache[cache_key]
+    
+    # Start timing the operation
+    start_time = time.time()
+    
     try:
-        request_row = await fetch_one(
-            "SELECT * FROM lab_requests WHERE id = $1",
-            str(lab_result.lab_request_id),
-            conn=conn
-        )
+        lab_result = await get_lab_result(result_id)
         
-        # Add debugging logs to understand the problem
-        logger.info(f"Lab request: {request_row}")
-        logger.info(f"Technician ID from request: {lab_technician_id}")
-        logger.info(f"Technician ID from DB: {request_row.get('technician_id') if request_row else 'None'}")
-        logger.info(f"Doctor ID from DB: {request_row.get('doctor_id') if request_row else 'None'}")
-        
-        # Enable access for the lab result creator (temporary fix)
-        result_query = """
-        SELECT lr.*, e.user_id as creator_id
-        FROM lab_results lr
-        LEFT JOIN lab_request_events e ON lr.lab_request_id = e.lab_request_id AND e.event_type = 'result_created'
-        WHERE lr.id = $1
-        """
-        result_info = await fetch_one(result_query, str(result_id), conn=conn)
-        creator_id = result_info.get("creator_id") if result_info else None
-        
-        logger.info(f"Result creator ID: {creator_id}")
-        
-        # Allow access if user is the assigned technician, the requesting doctor, or the result creator
-        if (not request_row or 
-            (request_row.get("technician_id") != str(lab_technician_id) and 
-             request_row.get("doctor_id") != str(lab_technician_id) and
-             creator_id != str(lab_technician_id))
-        ):
-            # For now, let's add a workaround to allow access for demonstration purposes
-            # In production, you would want to properly enforce authorization
-            logger.warning(f"User {lab_technician_id} is accessing lab result {result_id} without proper authorization")
-            
-            # Temporary fix: check if this is a demo/development environment
-            if settings.ENVIRONMENT == "development" or settings.ENVIRONMENT == "demo":
-                logger.warning("Bypassing authorization check in development/demo environment")
-                # Continue with the request
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view this result"
-                )
-            
-        # Convert result_data from JSON string if needed
-        if isinstance(lab_result.result_data, str):
-            try:
-                lab_result.result_data = json.loads(lab_result.result_data)
-            except json.JSONDecodeError:
-                lab_result.result_data = {}
-    finally:
-        await conn.close()
-
-    response_data = lab_result.to_dict()
-    
-    if include_details:
-        conn = await get_connection()
+        # Verify technician association or doctor association
+        conn = await get_lab_results_connection()
         try:
-            request_row = await fetch_one(
-                "SELECT * FROM lab_requests WHERE id = $1",
-                str(lab_result.lab_request_id),
-                conn=conn
+            # Optimized query to get lab request, technician, and creator in a single query
+            query = """
+            SELECT 
+                req.id as request_id,
+                req.technician_id, 
+                req.doctor_id,
+                ev.user_id as creator_id
+            FROM lab_requests req
+            LEFT JOIN lab_request_events ev ON 
+                req.id = ev.lab_request_id AND 
+                ev.event_type = 'result_created'
+            WHERE req.id = $1
+            LIMIT 1
+            """
+            
+            row = await conn.fetchrow(query, str(lab_result.lab_request_id))
+            
+            technician_id = row['technician_id'] if row else None
+            doctor_id = row['doctor_id'] if row else None
+            creator_id = row['creator_id'] if row else None
+            
+            # Allow access if user is the assigned technician, the requesting doctor, or the result creator
+            is_authorized = (
+                str(lab_technician_id) == str(technician_id) or
+                str(lab_technician_id) == str(doctor_id) or
+                str(lab_technician_id) == str(creator_id)
             )
             
-            if request_row:
-                response_data["lab_request"] = request_row
-                
-                # Get patient and doctor details - pass None for token
-                try:
-                    response_data["patient_details"] = await fetch_patient_details(
-                        patient_id=uuid.UUID(request_row["patient_id"]),
-                        token=None
+            # Bypass in development mode
+            if not is_authorized:
+                if settings.ENVIRONMENT in ["development", "demo"]:
+                    logger.warning("Bypassing authorization check in development/demo environment")
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to view this result"
                     )
-                except Exception as e:
-                    logger.error(f"Error fetching patient details: {str(e)}")
-                    response_data["patient_details"] = {"error": "Failed to fetch patient details"}
                 
+            # Convert result_data from JSON string if needed
+            if isinstance(lab_result.result_data, str):
                 try:
-                    response_data["doctor_details"] = await fetch_doctor_details(
-                        doctor_id=uuid.UUID(request_row["doctor_id"]),
-                        token=None
-                    )
-                except Exception as e:
-                    logger.error(f"Error fetching doctor details: {str(e)}")
-                    response_data["doctor_details"] = {"error": "Failed to fetch doctor details"}
+                    lab_result.result_data = json.loads(lab_result.result_data)
+                except json.JSONDecodeError:
+                    lab_result.result_data = {}
         finally:
-            await conn.close()
-    
-    return LabResultDetailResponse(**response_data)
+            await release_lab_results_connection(conn)
+
+        response_data = lab_result.to_dict()
+        
+        if include_details:
+            conn = await get_lab_results_connection()
+            try:
+                # Use a single efficient query with JOINs to get all related data
+                details_query = """
+                WITH lab_request AS (
+                    SELECT * FROM lab_requests WHERE id = $1
+                )
+                SELECT
+                    lr.*,
+                    row_to_json(lr) as lab_request
+                FROM lab_request lr
+                """
+                
+                details_row = await conn.fetchrow(details_query, str(lab_result.lab_request_id))
+                
+                if details_row:
+                    # Extract lab request
+                    response_data["lab_request"] = dict(details_row['lab_request'])
+                    
+                    # Prepare parallel tasks for patient and doctor details
+                    tasks = []
+                    
+                    # Get patient details if we have patient_id
+                    if 'patient_id' in response_data["lab_request"]:
+                        async def get_patient():
+                            try:
+                                return await fetch_patient_details(
+                                    patient_id=uuid.UUID(response_data["lab_request"]["patient_id"]),
+                                    token=None
+                                )
+                            except Exception as e:
+                                logger.error(f"Error fetching patient details: {str(e)}")
+                                return {"error": "Failed to fetch patient details"}
+                        
+                        tasks.append(("patient_details", asyncio.create_task(get_patient())))
+                    
+                    # Get doctor details if we have doctor_id
+                    if 'doctor_id' in response_data["lab_request"]:
+                        async def get_doctor():
+                            try:
+                                return await fetch_doctor_details(
+                                    doctor_id=uuid.UUID(response_data["lab_request"]["doctor_id"]),
+                                    token=None
+                                )
+                            except Exception as e:
+                                logger.error(f"Error fetching doctor details: {str(e)}")
+                                return {"error": "Failed to fetch doctor details"}
+                        
+                        tasks.append(("doctor_details", asyncio.create_task(get_doctor())))
+                    
+                    # Execute all tasks in parallel
+                    for key, task in tasks:
+                        try:
+                            response_data[key] = await task
+                        except Exception as e:
+                            logger.error(f"Task for {key} failed: {str(e)}")
+                            response_data[key] = {"error": f"Failed to fetch {key}"}
+            finally:
+                await release_lab_results_connection(conn)
+        
+        # Create response
+        result = LabResultDetailResponse(**response_data)
+        
+        # Record execution time
+        execution_time = time.time() - start_time
+        logger.info(f"Lab result detail query executed in {execution_time:.4f} seconds")
+        
+        # Cache the result if reasonably fast
+        if execution_time < 3.0:
+            detail_cache[cache_key] = result
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching lab result details: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching lab result details: {str(e)}"
+        )
 
 @router.patch("/{result_id}", response_model=LabResultResponse)
 async def update_lab_result(
@@ -580,6 +889,11 @@ async def update_lab_result(
                     )
                 except Exception as e:
                     logger.error(f"Error scheduling notify_doctor_of_lab_result task: {str(e)}")
+            
+            # Clear all caches after update
+            results_cache.clear()
+            detail_cache.clear()
+            images_cache.clear()
         
         # Fetch updated row for response
         updated_row = await fetch_one(
@@ -669,6 +983,11 @@ async def delete_lab_result(
                 "reason": "Lab result deleted by technician"
             })
         )
+        
+        # Clear all caches after deletion
+        results_cache.clear()
+        detail_cache.clear()
+        images_cache.clear()
 
         return StatusResponse(
             status="success",
@@ -676,6 +995,117 @@ async def delete_lab_result(
         )
     finally:
         await conn.close()
+
+@router.get("/{result_id}/images", response_model=List[ImageUploadResponse])
+async def get_result_images(
+    result_id: uuid.UUID = Path(...),
+    lab_technician_id: uuid.UUID = Query(..., description="Lab Technician ID from frontend")
+):
+    """
+    Get all images associated with a lab result.
+    This returns all images that have been uploaded for a specific lab result.
+    """
+    # Check cache first
+    cache_key = f"images_{result_id}_{lab_technician_id}"
+    if cache_key in images_cache:
+        logger.info("Returning result images from cache")
+        return images_cache[cache_key]
+    
+    lab_result = await get_lab_result(result_id)
+    
+    # Verify authorization (either technician or requesting doctor)
+    conn = await get_lab_results_connection()
+    try:
+        # Use a more efficient query
+        auth_query = """
+        SELECT
+            req.technician_id,
+            req.doctor_id
+        FROM lab_requests req
+        WHERE req.id = $1
+        """
+        
+        row = await conn.fetchrow(auth_query, str(lab_result.lab_request_id))
+        
+        if row:
+            technician_id = row["technician_id"]
+            doctor_id = row["doctor_id"]
+            
+            # Check authorization with development/demo bypass
+            if str(lab_technician_id) != str(technician_id) and str(lab_technician_id) != str(doctor_id):
+                # For demo/development environments, bypass the strict check
+                if settings.ENVIRONMENT in ["development", "demo"]:
+                    logger.warning("Bypassing authorization check in development/demo environment")
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Not authorized to view images for this result"
+                    )
+            
+        # First check dedicated images table if it exists
+        images = []
+        try:
+            # Optimized query with timeout
+            image_query = """
+            SELECT * FROM result_images 
+            WHERE result_id = $1 
+            ORDER BY created_at DESC
+            """
+            
+            image_rows = await conn.fetch(image_query, str(result_id), timeout=5.0)
+            
+            for row in image_rows:
+                images.append(ImageUploadResponse(
+                    file_path=row["file_path"],
+                    file_name=row["file_name"],
+                    file_size=row["file_size"],
+                    content_type=row["file_type"]
+                ))
+        except Exception as e:
+            logger.error(f"Error fetching from result_images table: {str(e)}")
+            # Fall back to array in main table
+            result_query = """
+            SELECT image_paths FROM lab_results WHERE id = $1
+            """
+            
+            result_row = await conn.fetchrow(result_query, str(result_id))
+            
+            if result_row and result_row.get("image_paths"):
+                for path in result_row["image_paths"]:
+                    # Extract file name from path
+                    file_name = os.path.basename(path)
+                    
+                    # Get full path to check size
+                    full_path = os.path.join(settings.UPLOAD_DIR, str(result_id), file_name)
+                    
+                    # Use a safer way to get file size
+                    try:
+                        file_size = os.path.getsize(full_path) if os.path.exists(full_path) else 0
+                    except Exception:
+                        file_size = 0
+                    
+                    # Guess content type from file extension
+                    content_type = "application/octet-stream"
+                    if file_name.lower().endswith(('.jpg', '.jpeg')):
+                        content_type = "image/jpeg"
+                    elif file_name.lower().endswith('.png'):
+                        content_type = "image/png"
+                    elif file_name.lower().endswith('.dcm'):
+                        content_type = "image/dicom"
+                        
+                    images.append(ImageUploadResponse(
+                        file_path=path,
+                        file_name=file_name,
+                        file_size=file_size,
+                        content_type=content_type
+                    ))
+        
+        # Cache the results
+        images_cache[cache_key] = images
+        
+        return images
+    finally:
+        await release_lab_results_connection(conn)
 
 @router.post("/{result_id}/upload-image", response_model=ImageUploadResponse)
 async def upload_result_image(
@@ -690,28 +1120,20 @@ async def upload_result_image(
     """
     lab_result = await get_lab_result(result_id)
     
-    # Verify technician association
+    # Authorization check
     conn = await get_connection()
     try:
-        request_row = await fetch_one(
-            "SELECT * FROM lab_requests WHERE id = $1",
-            str(lab_result.lab_request_id),
-            conn=conn
-        )
+        # Verify technician association with optimized query
+        auth_query = """
+        SELECT technician_id FROM lab_requests WHERE id = $1
+        """
         
-        # Add debugging logs
-        logger.info(f"Lab request: {request_row}")
-        logger.info(f"Technician ID from request: {lab_technician_id}")
-        logger.info(f"Technician ID from DB: {request_row.get('technician_id') if request_row else 'None'}")
+        technician_id = await conn.fetchval(auth_query, str(lab_result.lab_request_id))
         
-        # Check authorization - add same bypass as other endpoints
-        if not request_row or request_row.get("technician_id") != str(lab_technician_id):
-            # For demo/development environments, bypass the strict check
-            logger.warning(f"User {lab_technician_id} is attempting to upload image for result {result_id} without proper authorization")
-            
-            if settings.ENVIRONMENT == "development" or settings.ENVIRONMENT == "demo":
-                logger.warning("Bypassing authorization check in development/demo environment")
-                # Continue with the request
+        # Check authorization with bypass for development
+        if str(technician_id) != str(lab_technician_id):
+            if settings.ENVIRONMENT in ["development", "demo"]:
+                logger.warning("Bypassing authorization check in development environment")
             else:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -735,14 +1157,17 @@ async def upload_result_image(
     relative_path = f"/uploads/{result_id}/{filename}"
 
     try:
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Save file using aiofiles for non-blocking I/O
+        async with aiofiles.open(file_path, "wb") as buffer:
+            # Read in chunks for better memory usage
+            chunk_size = 1024 * 1024  # 1MB chunks
+            while chunk := await file.read(chunk_size):
+                await buffer.write(chunk)
 
         # Check file size
         file_size = os.path.getsize(file_path)
         if file_size > settings.MAX_IMAGE_SIZE_MB * 1024 * 1024:
-            os.remove(file_path)
+            await aiofiles.os.remove(file_path)
             raise FileUploadException(
                 f"File size {file_size} exceeds maximum {settings.MAX_IMAGE_SIZE_MB}MB"
             )
@@ -750,30 +1175,7 @@ async def upload_result_image(
         # Update result record
         conn = await get_connection()
         try:
-            result = await fetch_one(
-                "SELECT image_paths FROM lab_results WHERE id = $1",
-                str(result_id),
-                conn=conn
-            )
-            current_paths = result.get("image_paths", [])
-            if current_paths is None:
-                current_paths = []
-            
-            # Add image metadata
-            image_metadata = {
-                "path": relative_path,
-                "filename": filename,
-                "uploaded_at": datetime.now().isoformat(),
-                "uploaded_by": str(lab_technician_id),
-                "description": description,
-                "size": file_size,
-                "content_type": file.content_type
-            }
-            
-            # Convert to JSON if needed for database storage
-            metadata_json = json.dumps(image_metadata)
-            
-            # Add to result images table if exists, otherwise update the array
+            # Create result_images entry
             try:
                 await conn.execute(
                     """INSERT INTO result_images 
@@ -787,8 +1189,18 @@ async def upload_result_image(
                     description,
                     str(lab_technician_id)
                 )
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error inserting into result_images: {str(e)}")
                 # Fallback to updating the array in the main table
+                result = await fetch_one(
+                    "SELECT image_paths FROM lab_results WHERE id = $1",
+                    str(result_id),
+                    conn=conn
+                )
+                current_paths = result.get("image_paths", [])
+                if current_paths is None:
+                    current_paths = []
+                
                 current_paths.append(relative_path)
                 await conn.execute(
                     """UPDATE lab_results 
@@ -809,13 +1221,16 @@ async def upload_result_image(
                 datetime.now(),
                 str(lab_technician_id),
                 json.dumps({
-                    "lab_result_id": str(result_id),  # Convert UUID to string
+                    "lab_result_id": str(result_id),
                     "filename": filename,
                     "file_type": file.content_type,
                     "file_size": file_size,
                     "path": relative_path
                 })
             )
+            
+            # Clear image cache
+            images_cache.clear()
         finally:
             await conn.close()
 
@@ -828,104 +1243,10 @@ async def upload_result_image(
     except Exception as e:
         # Clean up if file was saved
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except:
+                pass
         raise FileUploadException(f"File upload failed: {str(e)}")
     finally:
-        file.file.close()
-
-@router.get("/{result_id}/images", response_model=List[ImageUploadResponse])
-async def get_result_images(
-    result_id: uuid.UUID = Path(...),
-    lab_technician_id: uuid.UUID = Query(..., description="Lab Technician ID from frontend")
-):
-    """
-    Get all images associated with a lab result.
-    This returns all images that have been uploaded for a specific lab result.
-    """
-    lab_result = await get_lab_result(result_id)
-    
-    # Verify authorization (either technician or requesting doctor)
-    conn = await get_connection()
-    try:
-        request_row = await fetch_one(
-            "SELECT * FROM lab_requests WHERE id = $1",
-            str(lab_result.lab_request_id),
-            conn=conn
-        )
-        
-        # Add debugging logs
-        logger.info(f"Lab request: {request_row}")
-        logger.info(f"Technician ID from request: {lab_technician_id}")
-        logger.info(f"Technician ID from DB: {request_row.get('technician_id') if request_row else 'None'}")
-        logger.info(f"Doctor ID from DB: {request_row.get('doctor_id') if request_row else 'None'}")
-        
-        # Check authorization with development/demo bypass
-        if not request_row or (
-            request_row.get("technician_id") != str(lab_technician_id) and 
-            request_row.get("doctor_id") != str(lab_technician_id)
-        ):
-            # For demo/development environments, bypass the strict check
-            logger.warning(f"User {lab_technician_id} is attempting to view images for result {result_id} without proper authorization")
-            
-            if settings.ENVIRONMENT == "development" or settings.ENVIRONMENT == "demo":
-                logger.warning("Bypassing authorization check in development/demo environment")
-                # Continue with the request
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view images for this result"
-                )
-            
-        # First check dedicated images table if it exists
-        images = []
-        try:
-            image_rows = await conn.fetch(
-                """SELECT * FROM result_images 
-                WHERE result_id = $1 
-                ORDER BY created_at DESC""", 
-                str(result_id)
-            )
-            
-            for row in image_rows:
-                images.append(ImageUploadResponse(
-                    file_path=row["file_path"],
-                    file_name=row["file_name"],
-                    file_size=row["file_size"],
-                    content_type=row["file_type"]
-                ))
-        except Exception:
-            # Fall back to array in main table
-            result_row = await fetch_one(
-                "SELECT image_paths FROM lab_results WHERE id = $1",
-                str(result_id),
-                conn=conn
-            )
-            
-            if result_row and result_row.get("image_paths"):
-                for path in result_row["image_paths"]:
-                    # Extract file name from path
-                    file_name = os.path.basename(path)
-                    
-                    # Get full path to check size
-                    full_path = os.path.join(settings.UPLOAD_DIR, str(result_id), file_name)
-                    file_size = os.path.getsize(full_path) if os.path.exists(full_path) else 0
-                    
-                    # Guess content type from file extension
-                    content_type = "application/octet-stream"
-                    if file_name.lower().endswith(('.jpg', '.jpeg')):
-                        content_type = "image/jpeg"
-                    elif file_name.lower().endswith('.png'):
-                        content_type = "image/png"
-                    elif file_name.lower().endswith('.dcm'):
-                        content_type = "image/dicom"
-                        
-                    images.append(ImageUploadResponse(
-                        file_path=path,
-                        file_name=file_name,
-                        file_size=file_size,
-                        content_type=content_type
-                    ))
-        
-        return images
-    finally:
-        await conn.close()
+        await file.close()

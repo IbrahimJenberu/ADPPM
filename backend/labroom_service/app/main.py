@@ -79,6 +79,19 @@ async def lab_requests_ws_endpoint(websocket: WebSocket, doctor_id: str):
 async def root():
     return RedirectResponse(url="/api/docs")
 
+# In main.py, add these imports at the top
+from app.routers.lab_requests import startup_event as lab_requests_startup
+from app.routers.lab_results import startup_event as lab_results_startup
+
+# Then modify the existing startup_event function in main.py:
+@app.on_event("startup")
+async def startup_event():
+    await init_db()
+    # Initialize modules
+    await lab_requests_startup()
+    await lab_results_startup()
+    logging.info("Database and modules initialized")
+
 # Add WebSocket endpoint
 app.add_websocket_route("/ws", websocket_endpoint)
 

@@ -72,6 +72,20 @@ WHERE status = 'pending' AND is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_lab_requests_high_priority ON lab_requests(created_at DESC)
 WHERE priority = 'high' AND is_deleted = FALSE;
 
+-- Composite index for lab results with request info
+CREATE INDEX IF NOT EXISTS idx_lab_results_request_id ON lab_results 
+(lab_request_id, created_at DESC)
+WHERE is_deleted = FALSE;
+
+-- Index on result creation time
+CREATE INDEX IF NOT EXISTS idx_lab_results_created_at ON lab_results 
+(created_at DESC)
+WHERE is_deleted = FALSE;
+
+-- Create index for images
+CREATE INDEX IF NOT EXISTS idx_result_images_result_id ON result_images
+(result_id, created_at DESC);
+
 -- Update database statistics
 ANALYZE lab_requests;
 ANALYZE lab_results;
