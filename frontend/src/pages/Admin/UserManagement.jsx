@@ -36,8 +36,7 @@ function UserManagement() {
     full_name: '',
     department: 'Pulmonology',
     role: 'user',
-    is_active: true,
-    is_verified: false
+    is_active: true
   });
   const [formErrors, setFormErrors] = useState({});
   const [touchedFields, setTouchedFields] = useState({});
@@ -138,9 +137,9 @@ function UserManagement() {
       pauseOnHover: true,
       draggable: true,
       progress: undefined,
-      className: type === 'success' ? 'bg-green-50 text-green-800 border-l-4 border-green-500' : 
-                 type === 'error' ? 'bg-red-50 text-red-800 border-l-4 border-red-500' : 
-                 'bg-blue-50 text-blue-800 border-l-4 border-blue-500',
+      className: type === 'success' ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border-l-4 border-emerald-500 shadow-md' : 
+                 type === 'error' ? 'bg-gradient-to-r from-red-50 to-rose-50 text-red-800 border-l-4 border-red-500 shadow-md' : 
+                 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border-l-4 border-blue-500 shadow-md',
     });
   };
   
@@ -156,8 +155,7 @@ function UserManagement() {
       full_name: '',
       department: 'Pulmonology',
       role: 'user',
-      is_active: true,
-      is_verified: false
+      is_active: true
     });
     setFormErrors({});
     setTouchedFields({});
@@ -182,8 +180,7 @@ function UserManagement() {
       full_name: user.full_name || '',
       department: user.department || 'Pulmonology',
       role: user.role || 'user',
-      is_active: user.is_active,
-      is_verified: user.is_verified
+      is_active: user.is_active
     });
     setFormErrors({});
     setTouchedFields({});
@@ -207,8 +204,7 @@ function UserManagement() {
         full_name: '',
         department: 'Pulmonology',
         role: 'user',
-        is_active: true,
-        is_verified: false
+        is_active: true
       });
       setFormErrors({});
       setTouchedFields({});
@@ -380,9 +376,11 @@ function UserManagement() {
         
         showToast(
           <div className="flex items-center">
-            <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
+            <div className="mr-3 bg-emerald-500 rounded-full p-1.5">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
             <div>
               <p className="font-medium">User added successfully!</p>
               <p className="text-sm">User <span className="font-semibold">{formData.full_name}</span> has been created.</p>
@@ -414,15 +412,16 @@ function UserManagement() {
           username: formData.username,
           department: formData.department,
           role: formData.role,
-          is_active: formData.is_active,
-          is_verified: formData.is_verified
+          is_active: formData.is_active
         });
         
         showToast(
           <div className="flex items-center">
-            <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
+            <div className="mr-3 bg-emerald-500 rounded-full p-1.5">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
             <div>
               <p className="font-medium">User updated successfully!</p>
               <p className="text-sm">User <span className="font-semibold">{formData.full_name}</span> has been updated.</p>
@@ -445,9 +444,11 @@ function UserManagement() {
       const errorMsg = error.response?.data?.detail || error.message || "An error occurred";
       showToast(
         <div className="flex items-center">
-          <svg className="w-5 h-5 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
+          <div className="mr-3 bg-red-500 rounded-full p-1.5">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </div>
           <div>
             <p className="font-medium">Error</p>
             <p className="text-sm">{errorMsg}</p>
@@ -468,9 +469,11 @@ function UserManagement() {
         await authClient.delete(`/users/${userId}`);
         showToast(
           <div className="flex items-center">
-            <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
+            <div className="mr-3 bg-emerald-500 rounded-full p-1.5">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </div>
             <span className="font-medium">User deleted successfully</span>
           </div>,
           "success"
@@ -478,33 +481,20 @@ function UserManagement() {
         fetchUsers(pagination.page);
       } catch (error) {
         const errorMsg = error.response?.data?.detail || error.message || "An error occurred";
-        showToast(`Error deleting user: ${errorMsg}`, "error");
+        showToast(
+          <div className="flex items-center">
+            <div className="mr-3 bg-red-500 rounded-full p-1.5">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </div>
+            <span className="font-medium">Error deleting user: {errorMsg}</span>
+          </div>, 
+          "error"
+        );
       } finally {
         setLoading(false);
       }
-    }
-  };
-  
-  // Handle user status toggle
-  const handleToggleStatus = async (userId, currentStatus) => {
-    try {
-      const newStatus = !currentStatus;
-      await authClient.put(`/users/${userId}`, {
-        is_active: newStatus
-      });
-      showToast(
-        <div className="flex items-center">
-          <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <span className="font-medium">User {newStatus ? 'activated' : 'deactivated'} successfully</span>
-        </div>,
-        "success"
-      );
-      fetchUsers(pagination.page);
-    } catch (error) {
-      const errorMsg = error.response?.data?.detail || error.message || "An error occurred";
-      showToast(`Error updating status: ${errorMsg}`, "error");
     }
   };
   
@@ -513,12 +503,6 @@ function UserManagement() {
     if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
       e.preventDefault();
     }
-  };
-  
-  // View user analytics
-  const handleViewUserAnalytics = (userId) => {
-    // The implementation will be handled by the parent component
-    console.log("View analytics for user ID:", userId);
   };
   
   // ===== UTILITY FUNCTIONS =====
@@ -546,38 +530,6 @@ function UserManagement() {
     if (strength < 70) return 'Fair';
     if (strength < 90) return 'Good';
     return 'Strong';
-  };
-  
-  // Format date for display
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Never';
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    }).format(date);
-  };
-  
-  // Get time since registration
-  const getTimeSinceRegistered = (dateString) => {
-    if (!dateString) return '';
-    
-    const now = new Date();
-    const registered = new Date(dateString);
-    const diffMs = now - registered;
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 60) {
-      return `${diffMins}m ago`;
-    } else if (diffMins < 24 * 60) {
-      return `${Math.floor(diffMins / 60)}h ago`;
-    } else {
-      return `${Math.floor(diffMins / (60 * 24))}d ago`;
-    }
   };
   
   // Get role badge styling - Updated with distinct colors for each role
@@ -868,9 +820,6 @@ function UserManagement() {
                   <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Last Login
-                  </th>
                   <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
@@ -940,25 +889,8 @@ function UserManagement() {
                           {user.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(user.last_login)}
-                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="flex justify-end space-x-2">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => handleViewUserAnalytics(user.id)}
-                            className="text-blue-600 hover:text-blue-900 transition-colors p-1.5 hover:bg-blue-50 rounded-full"
-                            title="View analytics"
-                            type="button"
-                            aria-label="View user analytics"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                          </motion.button>
-                          
                           <motion.button
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
@@ -971,29 +903,6 @@ function UserManagement() {
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => handleToggleStatus(user.id, user.is_active)}
-                            className={`${
-                              user.is_active 
-                                ? 'text-amber-600 hover:text-amber-900 hover:bg-amber-50' 
-                                : 'text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50'
-                            } transition-colors p-1.5 rounded-full`}
-                            title={user.is_active ? 'Deactivate user' : 'Activate user'}
-                            type="button"
-                            aria-label={user.is_active ? 'Deactivate user' : 'Activate user'}
-                          >
-                            {user.is_active ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                              </svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                              </svg>
-                            )}
                           </motion.button>
                           <motion.button
                             whileHover={{ scale: 1.1 }}
@@ -1087,7 +996,7 @@ function UserManagement() {
         </div>
       )}
       
-      {/* Modal - Enhanced design with click protection */}
+      {/* Modal - Modern design with tab navigation */}
       {showModal && (
         <div 
           className="fixed inset-0 z-10 overflow-y-auto"
@@ -1095,8 +1004,8 @@ function UserManagement() {
           role="dialog" 
           aria-modal="true"
         >
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            {/* Modal backdrop */}
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            {/* Modal backdrop with blur effect */}
             <div 
               className="fixed inset-0 bg-gray-500 bg-opacity-75 backdrop-blur-sm transition-opacity" 
               aria-hidden="true"
@@ -1109,475 +1018,476 @@ function UserManagement() {
             {/* Modal panel */}
             <div 
               ref={modalRef}
-              className="inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+              className="inline-block w-full max-w-md my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-2xl shadow-xl sm:align-middle"
               onClick={(e) => e.stopPropagation()} // Prevent clicks from reaching the backdrop
               onKeyDown={handleKeyDown} // Prevent form submission on Enter
             >
-              {/* Modal Header with gradient background */}
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
-                <div className="flex items-center justify-between">
+              {/* Gradient header with icon */}
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 relative">
+                <div className="flex items-center">
+                  <div className="mr-3 bg-white bg-opacity-20 rounded-full p-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
                   <h3 className="text-xl font-bold text-white" id="modal-title">
                     {modalMode === 'add' ? 'Add New User' : 'Edit User'}
                   </h3>
-                  <button
-                    onClick={closeModal}
-                    type="button"
-                    className="text-white hover:text-indigo-100 focus:outline-none transition-colors"
-                    aria-label="Close modal"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
                 </div>
-                <p className="text-indigo-100 text-sm mt-1">
-                  {modalMode === 'add' 
-                    ? 'Enter the details for the new user account.' 
-                    : 'Update the information for this user account.'}
-                </p>
+                <button
+                  onClick={closeModal}
+                  type="button"
+                  className="absolute top-4 right-4 text-white hover:text-indigo-100 transition-colors"
+                  aria-label="Close modal"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               
-              {/* Form content */}
-              <form ref={formRef} onSubmit={handleSubmit} className="p-6">
-                <div className="space-y-5">
-                  {/* Full Name */}
-                  <div>
-                    <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative rounded-md">
-                      <input
-                        type="text"
-                        id="full_name"
-                        name="full_name"
-                        ref={nameInputRef}
-                        className={`
-                          block w-full px-4 py-3 rounded-lg shadow-sm text-base border-2 transition-all duration-200
-                          ${touchedFields.full_name && formErrors.full_name 
-                            ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                            : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
-                          }
-                        `}
-                        placeholder="John Doe"
-                        value={formData.full_name}
-                        onChange={handleInputChange}
-                        onBlur={handleBlur}
-                        aria-invalid={touchedFields.full_name && !!formErrors.full_name}
-                        aria-describedby="full_name-error"
-                      />
-                      {touchedFields.full_name && formErrors.full_name && (
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {touchedFields.full_name && formErrors.full_name && (
-                        <motion.p 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 text-sm text-red-600" 
-                          id="full_name-error"
-                        >
-                          {formErrors.full_name}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  
-                  {/* Department */}
-                  <div>
-                    <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
-                      Department
-                    </label>
-                    <select
-                      id="department"
-                      name="department"
-                      className="block w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm text-base bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50 transition-all duration-200"
-                      value={formData.department}
-                      onChange={handleInputChange}
-                    >
-                      <option value="Pulmonology">Pulmonology</option>
-                      <option value="Dermatology">Dermatology</option>
-                      <option value="Cardiology">Cardiology</option>
-                      <option value="Neurology">Neurology</option>
-                      <option value="Orthopedics">Orthopedics</option>
-                    </select>
-                  </div>
-                  
-                  {/* Username */}
-                  <div>
-                    <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                      Username <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative rounded-md">
-                      <input
-                        type="text"
-                        id="username"
-                        name="username"
-                        className={`
-                          block w-full px-4 py-3 rounded-lg shadow-sm text-base border-2 transition-all duration-200
-                          ${touchedFields.username && formErrors.username 
-                            ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                            : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
-                          }
-                          ${modalMode === 'edit' ? 'bg-gray-100' : ''}
-                        `}
-                        placeholder="johndoe"
-                        value={formData.username}
-                        onChange={handleInputChange}
-                        onBlur={handleBlur}
-                        aria-invalid={touchedFields.username && !!formErrors.username}
-                        aria-describedby="username-error"
-                        disabled={modalMode === 'edit'}
-                      />
-                      {touchedFields.username && formErrors.username && (
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {touchedFields.username && formErrors.username && (
-                        <motion.p 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 text-sm text-red-600" 
-                          id="username-error"
-                        >
-                          {formErrors.username}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  
-                  {/* Email */}
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                      Email Address <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative rounded-md">
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        className={`
-                          block w-full px-4 py-3 rounded-lg shadow-sm text-base border-2 transition-all duration-200
-                          ${touchedFields.email && formErrors.email 
-                            ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                            : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
-                          }
-                          ${modalMode === 'edit' ? 'bg-gray-100' : ''}
-                        `}
-                        placeholder="john.doe@example.com"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        onBlur={handleBlur}
-                        aria-invalid={touchedFields.email && !!formErrors.email}
-                        aria-describedby="email-error"
-                        disabled={modalMode === 'edit'}
-                      />
-                      {touchedFields.email && formErrors.email && (
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                          <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <AnimatePresence>
-                      {touchedFields.email && formErrors.email && (
-                        <motion.p 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-2 text-sm text-red-600" 
-                          id="email-error"
-                        >
-                          {formErrors.email}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  
-                  {/* Role */}
-                  <div>
-                    <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
-                      Role
-                    </label>
-                    <select
-                      id="role"
-                      name="role"
-                      className="block w-full px-4 py-3 border-2 border-gray-300 rounded-lg shadow-sm text-base bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50 transition-all duration-200"
-                      value={formData.role}
-                      onChange={handleInputChange}
-                    >
-                      <option value="user">User</option>
-                      <option value="doctor">Doctor</option>
-                      <option value="cardroom">Card Room</option>
-                      <option value="labroom">Lab Technician</option>
-                      <option value="admin">Administrator</option>
-                    </select>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Assigns permissions and access level for the user account.
-                    </p>
-                  </div>
-                  
-                  {/* Status - Checkbox group */}
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <div className="flex flex-col space-y-3">
-                      <h4 className="text-sm font-medium text-gray-700">Account Settings</h4>
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="is_active" 
-                          name="is_active" 
-                          checked={formData.is_active} 
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded transition-colors"
-                          aria-describedby="is_active-description"
-                        />
-                        <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">
-                          Active account
-                        </label>
-                      </div>
-                      <p id="is_active-description" className="text-xs text-gray-500 ml-6">
-                        When active, the user can log in and access the system.
-                      </p>
-                      
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="is_verified" 
-                          name="is_verified" 
-                          checked={formData.is_verified} 
-                          onChange={handleInputChange}
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded transition-colors"
-                          aria-describedby="is_verified-description"
-                        />
-                        <label htmlFor="is_verified" className="ml-2 block text-sm text-gray-700">
-                          Verified account
-                        </label>
-                      </div>
-                      <p id="is_verified-description" className="text-xs text-gray-500 ml-6">
-                        When verified, the user has confirmed their email address.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {/* Password - only for adding new users */}
-                  {modalMode === 'add' && (
-                    <div>
-                      <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                        Password <span className="text-red-500">*</span>
+              {/* Form content with better layout */}
+              <div className="px-6 py-6">
+                <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Full Name */}
+                    <div className="md:col-span-2">
+                      <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-1">
+                        Full Name <span className="text-red-500">*</span>
                       </label>
                       <div className="relative rounded-md">
                         <input
-                          type={showPassword ? "text" : "password"}
-                          id="password"
-                          name="password"
+                          type="text"
+                          id="full_name"
+                          name="full_name"
+                          ref={nameInputRef}
                           className={`
-                            block w-full px-4 py-3 pr-12 rounded-lg shadow-sm text-base border-2 transition-all duration-200
-                            ${touchedFields.password && formErrors.password 
+                            block w-full px-4 py-3 rounded-lg text-base border transition-all duration-200
+                            ${touchedFields.full_name && formErrors.full_name 
                               ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
                               : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
                             }
                           `}
-                          placeholder="••••••••"
-                          value={formData.password}
+                          placeholder="John Doe"
+                          value={formData.full_name}
                           onChange={handleInputChange}
                           onBlur={handleBlur}
-                          aria-invalid={touchedFields.password && !!formErrors.password}
-                          aria-describedby="password-error password-hint"
+                          aria-invalid={touchedFields.full_name && !!formErrors.full_name}
+                          aria-describedby="full_name-error"
                         />
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                          <button
-                            type="button"
-                            className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors"
-                            onClick={() => setShowPassword(!showPassword)}
-                            tabIndex="-1"
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                          >
-                            {showPassword ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                              </svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
+                        {touchedFields.full_name && formErrors.full_name && (
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
-                      
-                      {/* Password strength indicator */}
-                      {formData.password && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-3 space-y-1"
-                        >
-                          <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <AnimatePresence>
+                        {touchedFields.full_name && formErrors.full_name && (
+                          <motion.p 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-2 text-sm text-red-600" 
+                            id="full_name-error"
+                          >
+                            {formErrors.full_name}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    
+                    {/* Username and Email */}
+                    <div>
+                      <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                        Username <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative rounded-md">
+                        <input
+                          type="text"
+                          id="username"
+                          name="username"
+                          className={`
+                            block w-full px-4 py-3 rounded-lg text-base border transition-all duration-200
+                            ${touchedFields.username && formErrors.username 
+                              ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                              : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
+                            }
+                            ${modalMode === 'edit' ? 'bg-gray-100' : ''}
+                          `}
+                          placeholder="johndoe"
+                          value={formData.username}
+                          onChange={handleInputChange}
+                          onBlur={handleBlur}
+                          aria-invalid={touchedFields.username && !!formErrors.username}
+                          aria-describedby="username-error"
+                          disabled={modalMode === 'edit'}
+                        />
+                        {touchedFields.username && formErrors.username && (
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <AnimatePresence>
+                        {touchedFields.username && formErrors.username && (
+                          <motion.p 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-2 text-sm text-red-600" 
+                            id="username-error"
+                          >
+                            {formErrors.username}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative rounded-md">
+                        <input
+                          type="email"
+                          id="email"
+                          name="email"
+                          className={`
+                            block w-full px-4 py-3 rounded-lg text-base border transition-all duration-200
+                            ${touchedFields.email && formErrors.email 
+                              ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                              : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
+                            }
+                            ${modalMode === 'edit' ? 'bg-gray-100' : ''}
+                          `}
+                          placeholder="john.doe@example.com"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          onBlur={handleBlur}
+                          aria-invalid={touchedFields.email && !!formErrors.email}
+                          aria-describedby="email-error"
+                          disabled={modalMode === 'edit'}
+                        />
+                        {touchedFields.email && formErrors.email && (
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <AnimatePresence>
+                        {touchedFields.email && formErrors.email && (
+                          <motion.p 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-2 text-sm text-red-600" 
+                            id="email-error"
+                          >
+                            {formErrors.email}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    
+                    {/* Role and Department */}
+                    <div>
+                      <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
+                        Role
+                      </label>
+                      <select
+                        id="role"
+                        name="role"
+                        className="block w-full px-4 py-3 border border-gray-300 rounded-lg text-base bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50 transition-all duration-200"
+                        value={formData.role}
+                        onChange={handleInputChange}
+                      >
+                        <option value="user">User</option>
+                        <option value="doctor">Doctor</option>
+                        <option value="cardroom">Card Room</option>
+                        <option value="labroom">Lab Technician</option>
+                        <option value="admin">Administrator</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
+                        Department (Only for Doctots)
+                      </label>
+                      <select
+                        id="department"
+                        name="department"
+                        className="block w-full px-4 py-3 border border-gray-300 rounded-lg text-base bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50 transition-all duration-200"
+                        value={formData.department}
+                        onChange={handleInputChange}
+                      >
+                        <option value="Pulmonology">Pulmonology</option>
+                        <option value="Dermatology">Dermatology</option>
+                        <option value="Cardiology">Cardiology</option>
+                        <option value="Neurology">Neurology</option>
+                        <option value="Orthopedics">Orthopedics</option>
+                      </select>
+                    </div>
+                    
+                    {/* Password fields - only for adding new users */}
+                    {modalMode === 'add' && (
+                      <>
+                        <div>
+                          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                            Password <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative rounded-md">
+                            <input
+                              type={showPassword ? "text" : "password"}
+                              id="password"
+                              name="password"
+                              className={`
+                                block w-full px-4 py-3 pr-12 rounded-lg text-base border transition-all duration-200
+                                ${touchedFields.password && formErrors.password 
+                                  ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                                  : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
+                                }
+                              `}
+                              placeholder="••••••••"
+                              value={formData.password}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              aria-invalid={touchedFields.password && !!formErrors.password}
+                              aria-describedby="password-error password-hint"
+                            />
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                              <button
+                                type="button"
+                                className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors"
+                                onClick={() => setShowPassword(!showPassword)}
+                                tabIndex="-1"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          
+                          {/* Password strength indicator */}
+                          {formData.password && (
                             <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: `${passwordStrength}%` }}
-                              className={`absolute top-0 left-0 h-full ${
-                                passwordStrength < 40 ? 'bg-red-500' : 
-                                passwordStrength < 70 ? 'bg-amber-500' : 
-                                passwordStrength < 90 ? 'bg-emerald-500' : 
-                                'bg-emerald-500'
-                              } transition-all duration-500`}
-                            ></motion.div>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Password strength:</span>
-                            <span className={
-                              passwordStrength < 40 ? 'text-red-600 font-medium' : 
-                              passwordStrength < 70 ? 'text-amber-600 font-medium' : 
-                              passwordStrength < 90 ? 'text-emerald-600 font-medium' : 
-                              'text-emerald-600 font-medium'
-                            }>
-                              {getPasswordStrengthLabel(passwordStrength)}
-                            </span>
-                          </div>
-                        </motion.div>
-                      )}
-                      
-                      <AnimatePresence>
-                        {touchedFields.password && formErrors.password ? (
-                          <motion.p 
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-2 text-sm text-red-600" 
-                            id="password-error"
-                          >
-                            {formErrors.password}
-                          </motion.p>
-                        ) : (
-                          <p className="mt-2 text-xs text-gray-500" id="password-hint">
-                            Password must be at least 8 characters with uppercase, lowercase, number, and special character.
-                          </p>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                  
-                  {/* Confirm Password */}
-                  {modalMode === 'add' && (
-                    <div>
-                      <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                        Confirm Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative rounded-md">
-                        <input
-                          type={showConfirmPassword ? "text" : "password"}
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          className={`
-                            block w-full px-4 py-3 pr-12 rounded-lg shadow-sm text-base border-2 transition-all duration-200
-                            ${touchedFields.confirmPassword && formErrors.confirmPassword 
-                              ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
-                              : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
-                            }
-                          `}
-                          placeholder="••••••••"
-                          value={formData.confirmPassword}
-                          onChange={handleInputChange}
-                          onBlur={handleBlur}
-                          aria-invalid={touchedFields.confirmPassword && !!formErrors.confirmPassword}
-                          aria-describedby="confirm-password-error"
-                        />
-                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                          <button
-                            type="button"
-                            className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            tabIndex="-1"
-                            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-                          >
-                            {showConfirmPassword ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                              </svg>
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-3 space-y-1"
+                            >
+                              <div className="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${passwordStrength}%` }}
+                                  className={`absolute top-0 left-0 h-full ${
+                                    passwordStrength < 40 ? 'bg-red-500' : 
+                                    passwordStrength < 70 ? 'bg-amber-500' : 
+                                    passwordStrength < 90 ? 'bg-emerald-500' : 
+                                    'bg-emerald-500'
+                                  } transition-all duration-500`}
+                                ></motion.div>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Password strength:</span>
+                                <span className={
+                                  passwordStrength < 40 ? 'text-red-600 font-medium' : 
+                                  passwordStrength < 70 ? 'text-amber-600 font-medium' : 
+                                  passwordStrength < 90 ? 'text-emerald-600 font-medium' : 
+                                  'text-emerald-600 font-medium'
+                                }>
+                                  {getPasswordStrengthLabel(passwordStrength)}
+                                </span>
+                              </div>
+                            </motion.div>
+                          )}
+                          
+                          <AnimatePresence>
+                            {touchedFields.password && formErrors.password ? (
+                              <motion.p 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="mt-2 text-sm text-red-600" 
+                                id="password-error"
+                              >
+                                {formErrors.password}
+                              </motion.p>
                             ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              </svg>
+                              <p className="mt-2 text-xs text-gray-500" id="password-hint">
+                                Must be 8+ characters with uppercase, lowercase, number, and special character
+                              </p>
                             )}
-                          </button>
+                          </AnimatePresence>
+                        </div>
+                        
+                        <div>
+                          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                            Confirm Password <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative rounded-md">
+                            <input
+                              type={showConfirmPassword ? "text" : "password"}
+                              id="confirmPassword"
+                              name="confirmPassword"
+                              className={`
+                                block w-full px-4 py-3 pr-12 rounded-lg text-base border transition-all duration-200
+                                ${touchedFields.confirmPassword && formErrors.confirmPassword 
+                                  ? 'border-red-300 text-red-900 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                                  : 'border-gray-300 bg-white focus:ring-indigo-500 focus:border-indigo-500 focus:bg-indigo-50'
+                                }
+                              `}
+                              placeholder="••••••••"
+                              value={formData.confirmPassword}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              aria-invalid={touchedFields.confirmPassword && !!formErrors.confirmPassword}
+                              aria-describedby="confirm-password-error"
+                            />
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                              <button
+                                type="button"
+                                className="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                tabIndex="-1"
+                                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                              >
+                                {showConfirmPassword ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                  </svg>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          <AnimatePresence>
+                            {touchedFields.confirmPassword && formErrors.confirmPassword && (
+                              <motion.p 
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="mt-2 text-sm text-red-600" 
+                                id="confirm-password-error"
+                              >
+                                {formErrors.confirmPassword}
+                              </motion.p>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </>
+                    )}
+                    
+                    {/* Active Account Toggle - Full width */}
+                    <div className="md:col-span-2">
+                      <div className="flex items-center justify-between bg-gray-50 px-4 py-3 rounded-lg">
+                        <div>
+                          <label htmlFor="is_active" className="font-medium text-gray-700">
+                            Active Account
+                          </label>
+                          <p className="text-sm text-gray-500">
+                            When active, the user can log in and access the system
+                          </p>
+                        </div>
+                        <div className="relative inline-block w-12 mr-2 align-middle select-none">
+                          <input 
+                            type="checkbox" 
+                            name="is_active" 
+                            id="is_active" 
+                            checked={formData.is_active} 
+                            onChange={handleInputChange}
+                            className="absolute block w-6 h-6 bg-white border-4 rounded-full appearance-none cursor-pointer focus:outline-none transition-transform duration-200 ease-in-out checked:right-0 checked:border-indigo-600 checked:bg-indigo-600"
+                          />
+                          <label 
+                            htmlFor="is_active" 
+                            className={`block h-6 overflow-hidden bg-gray-300 rounded-full cursor-pointer transition-colors duration-200 ease-in-out ${formData.is_active ? 'bg-indigo-300' : ''}`}
+                          ></label>
                         </div>
                       </div>
-                      <AnimatePresence>
-                        {touchedFields.confirmPassword && formErrors.confirmPassword && (
-                          <motion.p 
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="mt-2 text-sm text-red-600" 
-                            id="confirm-password-error"
-                          >
-                            {formErrors.confirmPassword}
-                          </motion.p>
-                        )}
-                      </AnimatePresence>
                     </div>
-                  )}
-                </div>
-              </form>
-              
-              {/* Form actions */}
-              <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row-reverse gap-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className={`
-                    w-full inline-flex justify-center rounded-lg px-5 py-3
-                    bg-gradient-to-r from-indigo-600 to-purple-600 text-base font-medium text-white  
-                    hover:from-indigo-700 hover:to-purple-700
-                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
-                    sm:w-auto 
-                    transition-all duration-200
-                    shadow-sm hover:shadow
-                    ${submitting ? 'opacity-70 cursor-not-allowed' : ''}
-                  `}
-                  aria-label={modalMode === 'add' ? 'Add User' : 'Save Changes'}
-                >
-                  {submitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </div>
+                  
+                  {/* Form actions */}
+                  <div className="flex flex-col sm:flex-row-reverse gap-3 mt-8 pt-6 border-t border-gray-200">
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      className={`
+                        w-full inline-flex justify-center items-center rounded-lg px-5 py-3
+                        bg-gradient-to-r from-indigo-600 to-purple-600 text-base font-medium text-white  
+                        hover:from-indigo-700 hover:to-purple-700
+                        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 
+                        sm:w-auto 
+                        transition-all duration-200
+                        shadow-sm hover:shadow
+                        ${submitting ? 'opacity-70 cursor-not-allowed' : ''}
+                      `}
+                      aria-label={modalMode === 'add' ? 'Add User' : 'Save Changes'}
+                    >
+                      {submitting ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          {modalMode === 'add' ? 'Adding User...' : 'Updating User...'}
+                        </>
+                      ) : (
+                        <>
+                          {modalMode === 'add' ? (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                              </svg>
+                              Add User
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              Save Changes
+                            </>
+                          )}
+                        </>
+                      )}
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={closeModal}
+                      disabled={submitting}
+                      className="w-full inline-flex justify-center items-center rounded-lg px-5 py-3 border border-gray-300 shadow-sm bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto transition-colors duration-200"
+                      aria-label="Cancel"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
-                      {modalMode === 'add' ? 'Adding User...' : 'Updating User...'}
-                    </>
-                  ) : (
-                    modalMode === 'add' ? 'Add User' : 'Save Changes'
-                  )}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={closeModal}
-                  disabled={submitting}
-                  className="w-full inline-flex justify-center rounded-lg px-5 py-3 border-2 border-gray-300 shadow-sm bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto transition-colors duration-200"
-                  aria-label="Cancel"
-                >
-                  Cancel
-                </motion.button>
+                      Cancel
+                    </motion.button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>

@@ -1316,135 +1316,7 @@ function AdminDashboard() {
     <div className="font-['Inter',system-ui,sans-serif] min-h-screen bg-gradient-to-br from-neutral-50 via-neutral-50 to-neutral-100 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-800 text-neutral-800 dark:text-neutral-200 transition-colors duration-300">
       <style>{fontStyle}</style>
       <Toaster position="top-right" />
-      
-      {/* Header with non-sticky design */}
-      <header className="bg-white/95 dark:bg-neutral-900/95 border-b border-neutral-200/70 dark:border-neutral-800/70 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <button 
-                className="md:hidden mr-2 p-2 rounded-lg text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              >
-                {isMobileMenuOpen ? (
-                  <FiX className="h-6 w-6" />
-                ) : (
-                  <FiMenu className="h-6 w-6" />
-                )}
-              </button>
-              
-              <div className="flex items-center">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-secondary-500 text-white shadow-sm">
-                  <TbHeartRateMonitor className="h-5 w-5" />
-                </div>
-                <h1 className="ml-3 text-xl font-bold text-neutral-800 dark:text-white font-display tracking-tight">MediInsight</h1>
-              </div>
-              
-              <div className="hidden md:flex items-center ml-10 space-x-8">
-                <motion.button 
-                  whileHover={{ y: -2 }}
-                  className="text-primary-600 font-medium text-sm dark:text-primary-400 border-b-2 border-primary-500 dark:border-primary-400 pb-0.5 transition-colors duration-200"
-                >
-                  Dashboard
-                </motion.button>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-3 md:space-x-4">
-              {/* Search button */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="p-2 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 hidden sm:flex"
-              >
-                <FiSearch className="h-5 w-5" />
-              </motion.button>
-              
-              {/* Notifications */}
-              <div className="relative">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-2 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400"
-                >
-                  <FiBell className="h-5 w-5" />
-                </motion.button>
-                {notifications > 0 && (
-                  <span className="absolute top-0 right-0 transform translate-x-1/4 -translate-y-1/4 bg-primary-500 text-white text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full">{notifications}</span>
-                )}
-              </div>
-              
-              {/* Theme Toggle */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleDarkMode}
-                className="p-2 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400"
-                title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-                aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-              >
-                {isDarkMode ? <FiSun className="h-5 w-5" /> : <FiMoon className="h-5 w-5" />}
-              </motion.button>
-              
-              {/* Online Staff Indicator (hidden on mobile) */}
-              <div className="bg-neutral-100 dark:bg-neutral-800 rounded-full p-1.5 hidden md:flex items-center">
-                <div className="flex -space-x-2 mr-2">
-                  <div className="w-7 h-7 rounded-full border-2 border-white dark:border-neutral-800 bg-emerald-400 flex items-center justify-center text-xs font-medium text-white">JD</div>
-                  <div className="w-7 h-7 rounded-full border-2 border-white dark:border-neutral-800 bg-purple-400 flex items-center justify-center text-xs font-medium text-white">TB</div>
-                  <div className="w-7 h-7 rounded-full border-2 border-white dark:border-neutral-800 bg-sky-400 flex items-center justify-center text-xs font-medium text-white">+3</div>
-                </div>
-              </div>
-              
-              {/* User Menu */}
-              <UserMenu isOpen={isUserMenuOpen} setIsOpen={setIsUserMenuOpen} />
-              
-              {/* Refresh Button (desktop only) */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={refreshData}
-                disabled={loading}
-                className="hidden lg:inline-flex items-center px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-400rounded-lg shadow-sm disabled:cursor-not-allowed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-neutral-800"
-              >
-                {loading ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                    className="mr-2"
-                  >
-                    <FiRefreshCw className="h-4 w-4" />
-                  </motion.div>
-                ) : (
-                  <FiRefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Refresh
-              </motion.button>
-            </div>
-          </div>
-        </div>
-        
-        {/* Mobile menu, show/hide based on menu state */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden border-t border-neutral-200 dark:border-neutral-800"
-            >
-              <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                <a href="#" className="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 block px-3 py-2 rounded-md text-base font-medium">Dashboard</a>
-                
-                <a href="#" className="text-neutral-800 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 block px-3 py-2 rounded-md text-base font-medium">Analytics</a>
-                
-                <a href="#" className="text-neutral-800 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 block px-3 py-2 rounded-md text-base font-medium">Staff Directory</a>
-                
-                <a href="#" className="text-neutral-800 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 block px-3 py-2 rounded-md text-base font-medium">Settings</a>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </header>
+
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Dashboard Header with 3D effect */}
@@ -1455,7 +1327,7 @@ function AdminDashboard() {
             transition={{ duration: 0.5, ease: "easeOut" }}
           >
             <h2 className="text-3xl font-bold text-neutral-800 dark:text-white font-display tracking-tight">
-              Clinical Analytics Dashboard
+              ADPPM System Analytics Dashboard
             </h2>
             <p className="text-neutral-500 dark:text-neutral-400 text-sm mt-1.5 flex items-center">
               <FiClock className="mr-1.5 h-3.5 w-3.5" />
@@ -2177,48 +2049,7 @@ function AdminDashboard() {
       {/* Premium Footer with Glass Effect */}
       <footer className="mt-auto px-4 sm:px-6 lg:px-8 py-8 relative">
         <div className="max-w-7xl mx-auto glass-effect rounded-2xl p-6">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-6">
-            <div className="flex items-center">
-              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-secondary-500 text-white shadow-md">
-                <TbHeartRateMonitor className="h-5 w-5" />
-              </div>
-              <div className="ml-3">
-                <p className="font-bold text-neutral-800 dark:text-white font-display">MediInsight</p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">Empowering healthcare analytics</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap gap-y-2 gap-x-6">
-              <motion.a 
-                href="#" 
-                whileHover={{ y: -2 }}
-                className="text-neutral-600 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 text-sm font-medium transition-colors duration-200"
-              >
-                Documentation
-              </motion.a>
-              <motion.a 
-                href="#" 
-                whileHover={{ y: -2 }}
-                className="text-neutral-600 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 text-sm font-medium transition-colors duration-200"
-              >
-                Privacy Policy
-              </motion.a>
-              <motion.a 
-                href="#" 
-                whileHover={{ y: -2 }}
-                className="text-neutral-600 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 text-sm font-medium transition-colors duration-200"
-              >
-                Terms of Service
-              </motion.a>
-              <motion.a 
-                href="#" 
-                whileHover={{ y: -2 }}
-                className="text-neutral-600 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 text-sm font-medium transition-colors duration-200"
-              >
-                Support
-              </motion.a>
-            </div>
-          </div>
+
           
           <div className="mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-700 flex flex-col md:flex-row justify-between items-center">
             <p className="text-neutral-500 dark:text-neutral-400 text-sm">© 2025 MediInsight Analytics. All rights reserved.</p>
