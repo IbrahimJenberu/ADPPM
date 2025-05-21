@@ -811,97 +811,8 @@ const WebSocketDebug = ({
   onSimulate 
 }) => {
   const [showDebug, setShowDebug] = useState(false);
-  
-  return (
-    <div className="bg-white rounded-lg shadow p-4 mb-4 border border-gray-200">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-900 flex items-center">
-          <FiInfo className="mr-2 text-blue-600" />
-          WebSocket Connection
-        </h3>
-        <button 
-          onClick={() => setShowDebug(!showDebug)} 
-          className="px-3 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"
-          type="button"
-        >
-          {showDebug ? 'Hide Details' : 'Show Details'}
-        </button>
-      </div>
-      
-      <div className="flex items-center mt-2">
-        <span className={`inline-block h-3 w-3 rounded-full mr-2 ${
-          connected ? 'bg-green-500' : 'bg-red-500 animate-pulse'
-        }`}></span>
-        <span className="text-sm capitalize">
-          {status.replace(/_/g, ' ')}
-        </span>
-        <span className="ml-2 text-xs text-gray-500">({messagesReceived} msgs received)</span>
-        {activeConnections > 0 && (
-          <span className="ml-2 text-xs text-green-500">
-            ({activeConnections} active connections)
-          </span>
-        )}
-        {reconnectAttempts > 0 && (
-          <span className="ml-2 text-xs text-orange-500">
-            ({reconnectAttempts} reconnect attempts)
-          </span>
-        )}
-      </div>
-      
-      {showDebug && (
-        <div className="mt-3 text-sm">
-          <div className="flex justify-between py-1 border-b border-gray-100">
-            <span className="text-gray-600">Connection Status:</span>
-            <span className={`font-medium ${connected ? 'text-green-600' : 'text-red-600'}`}>
-              {connected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          
-          <div className="flex justify-between py-1 border-b border-gray-100">
-            <span className="text-gray-600">Active Connections:</span>
-            <span className="font-medium">{activeConnections}</span>
-          </div>
-          
-          <div className="flex justify-between py-1 border-b border-gray-100">
-            <span className="text-gray-600">Reconnect Attempts:</span>
-            <span className="font-medium">{reconnectAttempts}</span>
-          </div>
-          
-          <div className="flex justify-between py-1 border-b border-gray-100">
-            <span className="text-gray-600">Messages Received:</span>
-            <span className="font-medium">{messagesReceived}</span>
-          </div>
-          
-          {lastMessage && (
-            <div className="mt-2">
-              <span className="text-gray-600">Last Message:</span>
-              <pre className="mt-1 p-2 bg-gray-50 rounded text-xs overflow-x-auto max-h-32 whitespace-pre-wrap break-all">
-                {typeof lastMessage === 'string' ? lastMessage : JSON.stringify(lastMessage, null, 2)}
-              </pre>
-            </div>
-          )}
-          
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={onReconnect}
-              className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-xs font-medium"
-              type="button"
-            >
-              Force Reconnect
-            </button>
-            
-            <button
-              onClick={onSimulate}
-              className="flex-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs font-medium"
-              type="button"
-            >
-              Simulate Request
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+
+  return null; // Render nothing
 };
 
 // Custom Toast notification component
@@ -2627,27 +2538,7 @@ function LabRequestsContent() {
               Laboratory Test Requests
             </h1>
           </div>
-          <div className="mt-4 flex md:mt-0 md:ml-4 gap-2">
-            {/* WebSocket status indicator */}
-            <WebSocketStatus 
-              status={wsStatus} 
-              messagesReceived={wsMessagesReceived}
-              activeConnections={wsActiveConnections}
-              onReconnect={wsReconnect}
-              lastMessage={wsLastMessage}
-              onSimulate={simulateLabRequest}
-            />
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              type="button"
-              onClick={() => setShowSettings(true)}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-full text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-colors"
-            >
-              <FiSettings className="-ml-0.5 mr-2 h-4 w-4" />
-              Settings
-            </motion.button>
-          </div>
+
         </div>
 
         {/* WebSocket Debug Panel */}

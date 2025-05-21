@@ -700,8 +700,24 @@ async def get_lab_result_by_id(
                 details_row = await conn.fetchrow(details_query, str(lab_result.lab_request_id))
                 
                 if details_row:
-                    # Extract lab request
-                    response_data["lab_request"] = dict(details_row['lab_request'])
+                    # Extract lab request - Fix JSON handling issue
+                    try:
+                        if isinstance(details_row['lab_request'], str):
+                            response_data["lab_request"] = json.loads(details_row['lab_request'])
+                        elif hasattr(details_row['lab_request'], 'keys'):  # Check if it's already dict-like
+                            response_data["lab_request"] = dict(details_row['lab_request'])
+                        else:
+                            # If asyncpg returns a different structure, convert it properly
+                            response_data["lab_request"] = {}
+                            # Add a safer manual retrieval method
+                            query_raw = """SELECT * FROM lab_requests WHERE id = $1"""
+                            raw_request = await conn.fetchrow(query_raw, str(lab_result.lab_request_id))
+                            if raw_request:
+                                response_data["lab_request"] = dict(raw_request)
+                    except Exception as e:
+                        logger.error(f"Error processing lab_request JSON: {str(e)}")
+                        # Fallback to a safer approach
+                        response_data["lab_request"] = {"id": str(lab_result.lab_request_id)}
                     
                     # Prepare parallel tasks for patient and doctor details
                     tasks = []

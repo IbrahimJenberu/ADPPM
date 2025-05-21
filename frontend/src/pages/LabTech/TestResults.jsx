@@ -44,32 +44,36 @@ const API_BASE_URL = "http://localhost:8025/api";
 
 // Test status options (must match backend enum)
 const TEST_STATUS = {
-  PENDING: "PENDING",
-  IN_PROGRESS: "IN_PROGRESS",
-  COMPLETED: "COMPLETED",
-  CANCELLED: "CANCELLED",
+  PENDING: "pending",
+  IN_PROGRESS: "in_progress",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
 };
 
 // Test priority options (must match backend enum)
 const TEST_PRIORITY = {
-  LOW: "LOW",
-  NORMAL: "NORMAL",
-  HIGH: "HIGH",
-  URGENT: "URGENT",
+  LOW: "low",
+  NORMAL: "medium",
+  HIGH: "high",
+  URGENT: "urgent",
 };
 
 // Test type options (must match backend enum)
 const TEST_TYPES = {
-  BLOOD_TEST: "BLOOD_TEST",
-  URINE_TEST: "URINE_TEST",
-  STOOL_TEST: "STOOL_TEST",
-  X_RAY: "X_RAY",
-  MRI: "MRI",
-  CT_SCAN: "CT_SCAN",
-  ULTRASOUND: "ULTRASOUND",
-  ECG: "ECG",
-  PATHOLOGY: "PATHOLOGY",
-  OTHER: "OTHER",
+  BLOOD_TEST: "blood_test",
+  URINE_TEST: "urine_test",
+  STOOL_TEST: "stool_test",
+  X_RAY: "x_ray",
+  MRI: "mri",
+  CT_SCAN: "ct_scan",
+  ULTRASOUND: "ultrasound",
+  ECG: "ecg",
+  PATHOLOGY: "pathology",
+  OTHER: "other",
+  COMPLETE_BLOOD_COUNT: "complete_blood_count",
+  LIVER_FUNCTION_TEST: "liver_function_test",
+  COVID19_TEST: "covid19_test",
+  ALLERGY_TEST: "allergy_test"
 };
 
 // Toast component for notifications
@@ -124,17 +128,17 @@ const Toast = ({ message, type, onClose }) => {
 const PriorityBadge = ({ priority }) => {
   let classes = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ";
   
-  switch (priority) {
-    case TEST_PRIORITY.LOW:
+  switch (priority.toLowerCase()) {
+    case "low":
       classes += "bg-gray-100 text-gray-800 border border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600";
       break;
-    case TEST_PRIORITY.NORMAL:
+    case "medium":
       classes += "bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-700";
       break;
-    case TEST_PRIORITY.HIGH:
+    case "high":
       classes += "bg-orange-100 text-orange-800 border border-orange-300 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-700";
       break;
-    case TEST_PRIORITY.URGENT:
+    case "urgent":
       classes += "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-700";
       break;
     default:
@@ -144,7 +148,7 @@ const PriorityBadge = ({ priority }) => {
   return (
     <span className={classes}>
       {priority.toLowerCase() === 'urgent' && <MdOutlineSpeed className="mr-1 -ml-0.5 h-3 w-3 animate-pulse" />}
-      {priority}
+      {priority.charAt(0).toUpperCase() + priority.slice(1)}
     </span>
   );
 };
@@ -154,20 +158,20 @@ const StatusBadge = ({ status }) => {
   let classes = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ";
   let icon = null;
   
-  switch (status) {
-    case TEST_STATUS.PENDING:
+  switch (status.toLowerCase()) {
+    case "pending":
       classes += "bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700";
       icon = <FiClock className="mr-1 -ml-0.5 h-3 w-3" />;
       break;
-    case TEST_STATUS.IN_PROGRESS:
+    case "in_progress":
       classes += "bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-700";
       icon = <FiRefreshCw className="mr-1 -ml-0.5 h-3 w-3 animate-spin" />;
       break;
-    case TEST_STATUS.COMPLETED:
+    case "completed":
       classes += "bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700";
       icon = <FiCheck className="mr-1 -ml-0.5 h-3 w-3" />;
       break;
-    case TEST_STATUS.CANCELLED:
+    case "cancelled":
       classes += "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-700";
       icon = <FiX className="mr-1 -ml-0.5 h-3 w-3" />;
       break;
@@ -178,7 +182,7 @@ const StatusBadge = ({ status }) => {
   return (
     <span className={classes}>
       {icon}
-      {status.replace('_', ' ')}
+      {status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1)}
     </span>
   );
 };
@@ -245,21 +249,36 @@ function TestResults() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
 
-  // State for pagination
-  const [pagination, setPagination] = useState({
+  // State for lab requests pagination
+  const [labRequestPagination, setLabRequestPagination] = useState({
     page: 1,
     size: 5,
     total: 0,
     pages: 0,
   });
 
+  // State for lab results pagination
+  const [labResultPagination, setLabResultPagination] = useState({
+    page: 1,
+    size: 10,
+    total: 0,
+    pages: 0,
+  });
+
   // State for lab request filters
   const [labRequestFilters, setLabRequestFilters] = useState({
-    status: "IN_PROGRESS,PENDING", // Default to show in-progress and pending requests
+    status: "pending", // Default to show pending and in-progress requests
     priority: null,
     test_type: null,
     patient_id: null,
     doctor_id: null,
+    from_date: null,
+    to_date: null,
+  });
+
+  // State for lab result filters
+  const [labResultFilters, setLabResultFilters] = useState({
+    status: null,
     from_date: null,
     to_date: null,
   });
@@ -324,8 +343,8 @@ function TestResults() {
 
   // Fetch test results on component mount
   useEffect(() => {
-    fetchLabResults();
-    fetchLabRequests();
+    fetchLabResults(1);
+    fetchLabRequests(1);
   }, []);
 
   // Function to close all modals
@@ -346,45 +365,52 @@ function TestResults() {
     }
 
     const filtered = labResults.filter(
-      (result) =>
-        (result.patient_details &&
-          result.patient_details.name &&
-          result.patient_details.name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())) ||
-        (result.patient_details &&
-          result.patient_details.id &&
-          result.patient_details.id
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())) ||
-        (result.lab_request &&
-          result.lab_request.test_type &&
-          result.lab_request.test_type
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())) ||
-        (result.conclusion &&
-          result.conclusion.toLowerCase().includes(searchTerm.toLowerCase()))
+      (result) => {
+        // Get parameter names from result_data
+        const paramNames = Object.keys(result.result_data || {});
+        
+        return (
+          // Search by parameter names
+          paramNames.some(param => param.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          // Search by conclusion
+          (result.conclusion &&
+            result.conclusion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          // Search by ID
+          (result.id &&
+            result.id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          // Search by lab request ID
+          (result.lab_request_id &&
+            result.lab_request_id.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+      }
     );
 
     setFilteredResults(filtered);
   }, [searchTerm, labResults]);
 
-  // Fetch all lab results
-  const fetchLabResults = async () => {
+  // Fetch all lab results with pagination
+  const fetchLabResults = async (page = 1) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // In a real app, you would paginate this endpoint
-      const response = await axios.get(`${API_BASE_URL}/lab-results`, {
-        params: {
-          lab_technician_id: MOCK_LAB_TECHNICIAN_ID,
-          include_details: true,
-        },
-      });
+      // Set up pagination parameters
+      const params = {
+        lab_technician_id: MOCK_LAB_TECHNICIAN_ID,
+        include_details: true,
+        page: page,
+        size: labResultPagination.size
+      };
+      
+      // Add filters if they exist
+      if (labResultFilters.status) params.status = labResultFilters.status;
+      if (labResultFilters.from_date) params.from_date = labResultFilters.from_date;
+      if (labResultFilters.to_date) params.to_date = labResultFilters.to_date;
+
+      const response = await axios.get(`${API_BASE_URL}/lab-results`, { params });
 
       // Process the response data
-      const processedResults = response.data.map((result) => {
+      const processedResults = (Array.isArray(response.data) ? response.data : (response.data.items || [])).map((result) => {
         // Parse result_data if it's a string
         if (typeof result.result_data === "string") {
           try {
@@ -397,9 +423,24 @@ function TestResults() {
         return result;
       });
 
+      // Update pagination info
+      if (response.data.total !== undefined) {
+        setLabResultPagination({
+          page: response.data.page || page,
+          size: response.data.size || labResultPagination.size,
+          total: response.data.total,
+          pages: response.data.pages || Math.ceil(response.data.total / labResultPagination.size),
+        });
+      }
+
       setLabResults(processedResults);
       setFilteredResults(processedResults);
-      showToast("Test results loaded successfully", "success");
+      
+      if (page > 1) {
+        showToast("Lab results page updated", "info");
+      } else {
+        showToast("Test results loaded successfully", "success");
+      }
     } catch (err) {
       console.error("Failed to fetch lab results:", err);
       setError("Failed to load test results. Please try again later.");
@@ -415,27 +456,28 @@ function TestResults() {
 
     try {
       // Create base URL with pagination
-      let url = `/lab-requests?page=${page}&size=${pagination.size}`;
-
-      // Add lab technician ID
-      url += `&labtechnician_id=${MOCK_LAB_TECHNICIAN_ID}`;
+      const params = {
+        page: page,
+        size: labRequestPagination.size,
+        technician_id: MOCK_LAB_TECHNICIAN_ID
+      };
 
       // Add filters if they exist
-      // if (labRequestFilters.status) url += `&status=${labRequestFilters.status}`;
-      // if (labRequestFilters.priority) url += `&priority=${labRequestFilters.priority}`;
-      // if (labRequestFilters.test_type) url += `&test_type=${labRequestFilters.test_type}`;
-      // if (labRequestFilters.from_date) url += `&from_date=${labRequestFilters.from_date}`;
-      // if (labRequestFilters.to_date) url += `&to_date=${labRequestFilters.to_date}`;
+      if (labRequestFilters.status) params.status = labRequestFilters.status;
+      if (labRequestFilters.priority) params.priority = labRequestFilters.priority;
+      if (labRequestFilters.test_type) params.test_type = labRequestFilters.test_type;
+      if (labRequestFilters.from_date) params.from_date = labRequestFilters.from_date;
+      if (labRequestFilters.to_date) params.to_date = labRequestFilters.to_date;
 
-      const response = await axios.get(API_BASE_URL + url);
+      const response = await axios.get(`${API_BASE_URL}/lab-requests`, { params });
 
       // Update lab requests and pagination
       setLabRequests(response.data.items || []);
-      setPagination({
-        page: response.data.page,
-        size: response.data.size,
-        total: response.data.total,
-        pages: response.data.pages,
+      setLabRequestPagination({
+        page: response.data.page || page,
+        size: response.data.size || labRequestPagination.size,
+        total: response.data.total || 0,
+        pages: response.data.pages || Math.ceil((response.data.total || 0) / labRequestPagination.size),
       });
       
       if (page > 1) {
@@ -454,29 +496,48 @@ function TestResults() {
   };
 
   // Handle page change for lab requests
-  const handlePageChange = (newPage) => {
+  const handleLabRequestPageChange = (newPage) => {
     fetchLabRequests(newPage);
   };
 
+  // Handle page change for lab results
+  const handleLabResultPageChange = (newPage) => {
+    fetchLabResults(newPage);
+  };
+
   // Handle lab request filter change
-  const handleFilterChange = (name, value) => {
+  const handleRequestFilterChange = (name, value) => {
     setLabRequestFilters((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  // Apply filters and fetch lab requests
-  const applyFilters = () => {
+  // Handle lab result filter change
+  const handleResultFilterChange = (name, value) => {
+    setLabResultFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Apply lab request filters and fetch lab requests
+  const applyRequestFilters = () => {
     fetchLabRequests(1); // Reset to first page when applying filters
     setShowFilterModal(false);
     showToast("Filters applied successfully", "success");
   };
 
-  // Reset filters to default
-  const resetFilters = () => {
+  // Apply lab result filters
+  const applyResultFilters = () => {
+    fetchLabResults(1); // Reset to first page when applying filters
+    showToast("Result filters applied successfully", "success");
+  };
+
+  // Reset lab request filters to default
+  const resetRequestFilters = () => {
     setLabRequestFilters({
-      status: "IN_PROGRESS,PENDING",
+      status: "pending,in_progress",
       priority: null,
       test_type: null,
       patient_id: null,
@@ -484,7 +545,17 @@ function TestResults() {
       from_date: null,
       to_date: null,
     });
-    showToast("Filters have been reset", "info");
+    showToast("Request filters have been reset", "info");
+  };
+
+  // Reset lab result filters
+  const resetResultFilters = () => {
+    setLabResultFilters({
+      status: null,
+      from_date: null,
+      to_date: null,
+    });
+    showToast("Result filters have been reset", "info");
   };
 
   // Fetch a single lab result with details
@@ -500,19 +571,30 @@ function TestResults() {
         }
       );
 
-      // Parse result_data if it's a string
-      if (typeof response.data.result_data === "string") {
+      const resultData = response.data;
+
+      // Ensure result_data is an object, not a string
+      if (typeof resultData.result_data === "string") {
         try {
-          response.data.result_data = JSON.parse(response.data.result_data);
+          resultData.result_data = JSON.parse(resultData.result_data);
         } catch (e) {
-          response.data.result_data = {};
+          console.error("Error parsing result_data:", e);
+          resultData.result_data = {};
         }
       }
 
-      return response.data;
+      // If result_data is null or undefined, initialize as empty object
+      if (!resultData.result_data) {
+        resultData.result_data = {};
+      }
+
+      return resultData;
     } catch (err) {
       console.error(`Failed to fetch lab result ${resultId}:`, err);
-      showToast(`Failed to load result details`, "error");
+      if (err.response) {
+        console.error("Error response:", err.response.data);
+      }
+      showToast(`Failed to load result details: ${err.response?.data?.detail || err.message}`, "error");
       throw err;
     }
   };
@@ -542,9 +624,15 @@ function TestResults() {
   // Create a new lab result
   const createLabResult = async () => {
     try {
+      // Ensure result_data is a valid object and not null or undefined
+      const submissionData = {
+        ...formData,
+        result_data: formData.result_data || {}
+      };
+
       const response = await axios.post(
         `${API_BASE_URL}/lab-results`,
-        formData,
+        submissionData,
         {
           params: {
             lab_technician_id: MOCK_LAB_TECHNICIAN_ID,
@@ -552,8 +640,8 @@ function TestResults() {
         }
       );
 
-      // Add the new result to the list
-      fetchLabResults();
+      // Refresh the lab results with first page
+      fetchLabResults(1);
 
       // Close the create modal
       setShowCreateModal(false);
@@ -569,7 +657,7 @@ function TestResults() {
       return response.data;
     } catch (err) {
       console.error("Failed to create lab result:", err);
-      showToast("Failed to create lab result", "error");
+      showToast(`Failed to create lab result: ${err.response?.data?.detail || err.message}`, "error");
       throw err;
     }
   };
@@ -577,8 +665,9 @@ function TestResults() {
   // Update an existing lab result
   const updateLabResult = async (resultId) => {
     try {
+      // Ensure result_data is a valid object and not null or undefined
       const updateData = {
-        result_data: formData.result_data,
+        result_data: formData.result_data || {},
         conclusion: formData.conclusion,
       };
 
@@ -592,8 +681,8 @@ function TestResults() {
         }
       );
 
-      // Update the result in the list
-      fetchLabResults();
+      // Refresh the lab results with current page
+      fetchLabResults(labResultPagination.page);
 
       // Close the edit modal
       closeAllModals();
@@ -602,7 +691,7 @@ function TestResults() {
       return response.data;
     } catch (err) {
       console.error(`Failed to update lab result ${resultId}:`, err);
-      showToast("Failed to update lab result", "error");
+      showToast(`Failed to update lab result: ${err.response?.data?.detail || err.message}`, "error");
       throw err;
     }
   };
@@ -646,7 +735,7 @@ function TestResults() {
     );
 
     // Refresh lab requests since one should be back to in-progress status
-    fetchLabRequests();
+    fetchLabRequests(labRequestPagination.page);
 
     // Close all modals including the detail modal
     closeAllModals();
@@ -720,10 +809,21 @@ function TestResults() {
       // Close all other modals first
       closeAllModals();
       
-      const resultDetail = await fetchLabResultDetail(resultId);
-      setSelectedResult(resultDetail);
-      await fetchLabResultImages(resultId);
-      setShowDetailModal(true);
+      // Set loading state
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const resultDetail = await fetchLabResultDetail(resultId);
+        setSelectedResult(resultDetail);
+        await fetchLabResultImages(resultId);
+        setShowDetailModal(true);
+      } catch (err) {
+        console.error("Error in handleViewDetails:", err);
+        showToast(`Failed to load result details: ${err.response?.data?.detail || err.message}`, "error");
+      } finally {
+        setIsLoading(false);
+      }
     } catch (err) {
       showToast("Failed to load result details", "error");
     }
@@ -735,16 +835,27 @@ function TestResults() {
       // Close all other modals first
       closeAllModals();
       
-      const resultDetail = await fetchLabResultDetail(resultId);
-      setSelectedResult(resultDetail);
+      // Set loading state
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const resultDetail = await fetchLabResultDetail(resultId);
+        setSelectedResult(resultDetail);
 
-      // Set form data
-      setFormData({
-        result_data: resultDetail.result_data || {},
-        conclusion: resultDetail.conclusion || "",
-      });
+        // Set form data
+        setFormData({
+          result_data: resultDetail.result_data || {},
+          conclusion: resultDetail.conclusion || "",
+        });
 
-      setShowEditModal(true);
+        setShowEditModal(true);
+      } catch (err) {
+        console.error("Error in handleEditResult:", err);
+        showToast(`Failed to load result for editing: ${err.response?.data?.detail || err.message}`, "error");
+      } finally {
+        setIsLoading(false);
+      }
     } catch (err) {
       showToast("Failed to load result for editing", "error");
     }
@@ -789,12 +900,15 @@ function TestResults() {
   };
 
   // Handle result data changes
-  const handleResultDataChange = (key, value) => {
+  const handleResultDataChange = (key, field, value) => {
     setFormData({
       ...formData,
       result_data: {
         ...formData.result_data,
-        [key]: value,
+        [key]: {
+          ...formData.result_data[key],
+          [field]: value
+        }
       },
     });
   };
@@ -847,22 +961,59 @@ function TestResults() {
 
   // Get test type icon
   const getTestTypeIcon = (testType) => {
-    switch (testType) {
-      case TEST_TYPES.BLOOD_TEST:
-        return <MdOutlineBiotech className="h-5 w-5 text-red-500" />;
-      case TEST_TYPES.URINE_TEST:
-        return <MdOutlineBiotech className="h-5 w-5 text-amber-500" />;
-      case TEST_TYPES.STOOL_TEST:
-        return <MdOutlineBiotech className="h-5 w-5 text-brown-500" />;
-      case TEST_TYPES.X_RAY:
-      case TEST_TYPES.MRI:
-      case TEST_TYPES.CT_SCAN:
-      case TEST_TYPES.ULTRASOUND:
-        return <MdOutlineScience className="h-5 w-5 text-blue-500" />;
-      case TEST_TYPES.ECG:
-        return <MdOutlineHealthAndSafety className="h-5 w-5 text-emerald-500" />;
-      default:
-        return <MdOutlineBiotech className="h-5 w-5 text-gray-500" />;
+    if (!testType) return <MdOutlineBiotech className="h-5 w-5 text-gray-500" />;
+    
+    const type = testType.toLowerCase();
+    
+    if (type.includes("blood") || type.includes("complete_blood_count")) {
+      return <MdOutlineBiotech className="h-5 w-5 text-red-500" />;
+    } else if (type.includes("urine")) {
+      return <MdOutlineBiotech className="h-5 w-5 text-amber-500" />;
+    } else if (type.includes("stool")) {
+      return <MdOutlineBiotech className="h-5 w-5 text-brown-500" />;
+    } else if (type.includes("liver") || type.includes("function_test")) {
+      return <MdOutlineBiotech className="h-5 w-5 text-purple-500" />;
+    } else if (type.includes("x_ray") || type.includes("mri") || 
+               type.includes("ct_scan") || type.includes("ultrasound")) {
+      return <MdOutlineScience className="h-5 w-5 text-blue-500" />;
+    } else if (type.includes("ecg")) {
+      return <MdOutlineHealthAndSafety className="h-5 w-5 text-emerald-500" />;
+    } else if (type.includes("covid") || type.includes("allergy")) {
+      return <MdOutlineScience className="h-5 w-5 text-orange-500" />;
+    } else {
+      return <MdOutlineBiotech className="h-5 w-5 text-gray-500" />;
+    }
+  };
+  
+  // Get the first parameter from result_data
+  const getFirstParameter = (resultData) => {
+    if (!resultData || Object.keys(resultData).length === 0) {
+      return { name: "N/A", value: "N/A", unit: "" };
+    }
+    
+    const firstKey = Object.keys(resultData)[0];
+    const data = resultData[firstKey];
+    
+    return {
+      name: firstKey,
+      value: data.value || "N/A",
+      unit: data.unit || "",
+      normal_range: data.normal_range || ""
+    };
+  };
+  
+  // Check if value is within normal range
+  const isValueNormal = (value, normalRange) => {
+    if (!normalRange) return true;
+    
+    try {
+      const numValue = parseFloat(value);
+      const numRange = parseFloat(normalRange);
+      
+      // Simple check: if value is greater than or equal to normal range, consider it normal
+      return numValue >= numRange;
+    } catch (e) {
+      return true; // If we can't parse, assume it's normal
     }
   };
 
@@ -914,7 +1065,7 @@ function TestResults() {
           </div>
           <p className="text-lg font-medium">{error}</p>
           <button 
-            onClick={fetchLabResults}
+            onClick={() => fetchLabResults(1)}
             className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200 flex items-center gap-2"
           >
             <FiRefreshCw className="h-4 w-4" />
@@ -961,16 +1112,16 @@ function TestResults() {
                 Test ID
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Patient
+                Parameter
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Test Type
+                Value
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Date
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Result
+                Conclusion
               </th>
               <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Actions
@@ -979,10 +1130,8 @@ function TestResults() {
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredResults.map((result, index) => {
-              const status = getStatusLabel(result);
-              const icon = result.lab_request?.test_type ? 
-                getTestTypeIcon(result.lab_request.test_type) : 
-                <MdOutlineBiotech className="h-5 w-5 text-gray-500" />;
+              const parameter = getFirstParameter(result.result_data);
+              const isNormal = isValueNormal(parameter.value, parameter.normal_range);
 
               return (
                 <motion.tr
@@ -1006,34 +1155,30 @@ function TestResults() {
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-9 w-9 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                        <FiUser className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                      <div className="flex-shrink-0 mr-2">
+                        <MdOutlineBiotech className="h-5 w-5 text-teal-500" />
                       </div>
-                      <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {result.patient_details?.name || "Unknown Patient"}
-                        </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          ID: {result.patient_details?.id?.substring(0, 8) || "N/A"}
-                        </div>
+                      <div className="text-sm text-gray-900 dark:text-gray-100">
+                        {parameter.name}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 mr-2">
-                        {icon}
-                      </div>
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {result.lab_request?.test_type?.replace(/_/g, ' ') || "Unknown Test"}
-                      </div>
-                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      isNormal 
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200" 
+                        : "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200"
+                    }`}>
+                      {parameter.value} {parameter.unit}
+                    </span>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {formatDate(result.created_at)}
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
-                    <ResultStatusBadge status={status} />
+                    <div className="text-sm text-gray-900 dark:text-gray-100 max-w-[200px] truncate">
+                      {result.conclusion || "No conclusion"}
+                    </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div className="flex space-x-3">
@@ -1123,26 +1268,26 @@ function TestResults() {
                 <div className="relative">
                   <select
                     value={labRequestFilters.status || ""}
-                    onChange={(e) => handleFilterChange("status", e.target.value)}
+                    onChange={(e) => handleRequestFilterChange("status", e.target.value)}
                     className="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm"
                   >
                     <option value="">All Statuses</option>
-                    <option value={TEST_STATUS.PENDING}>
-                      {TEST_STATUS.PENDING.replace('_', ' ')}
+                    <option value="pending">
+                      Pending
                     </option>
-                    <option value={TEST_STATUS.IN_PROGRESS}>
-                      {TEST_STATUS.IN_PROGRESS.replace('_', ' ')}
+                    <option value="in_progress">
+                      In Progress
                     </option>
                     <option
-                      value={`${TEST_STATUS.PENDING},${TEST_STATUS.IN_PROGRESS}`}
+                      value="pending,in_progress"
                     >
-                      PENDING & IN PROGRESS
+                      Pending & In Progress
                     </option>
-                    <option value={TEST_STATUS.COMPLETED}>
-                      {TEST_STATUS.COMPLETED.replace('_', ' ')}
+                    <option value="completed">
+                      Completed
                     </option>
-                    <option value={TEST_STATUS.CANCELLED}>
-                      {TEST_STATUS.CANCELLED.replace('_', ' ')}
+                    <option value="cancelled">
+                      Cancelled
                     </option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
@@ -1159,16 +1304,14 @@ function TestResults() {
                 <div className="relative">
                   <select
                     value={labRequestFilters.priority || ""}
-                    onChange={(e) => handleFilterChange("priority", e.target.value)}
+                    onChange={(e) => handleRequestFilterChange("priority", e.target.value)}
                     className="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm"
                   >
                     <option value="">All Priorities</option>
-                    <option value={TEST_PRIORITY.LOW}>{TEST_PRIORITY.LOW}</option>
-                    <option value={TEST_PRIORITY.NORMAL}>
-                      {TEST_PRIORITY.NORMAL}
-                    </option>
-                    <option value={TEST_PRIORITY.HIGH}>{TEST_PRIORITY.HIGH}</option>
-                    <option value={TEST_PRIORITY.URGENT}>{TEST_PRIORITY.URGENT}</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-gray-300">
                     <FiChevronRight className="h-5 w-5 transform rotate-90" />
@@ -1185,7 +1328,7 @@ function TestResults() {
                   <select
                     value={labRequestFilters.test_type || ""}
                     onChange={(e) =>
-                      handleFilterChange("test_type", e.target.value)
+                      handleRequestFilterChange("test_type", e.target.value)
                     }
                     className="block w-full pl-3 pr-10 py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm"
                   >
@@ -1216,7 +1359,7 @@ function TestResults() {
                       type="date"
                       value={labRequestFilters.from_date || ""}
                       onChange={(e) =>
-                        handleFilterChange("from_date", e.target.value || null)
+                        handleRequestFilterChange("from_date", e.target.value || null)
                       }
                       className="pl-10 block w-full py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm"
                     />
@@ -1234,7 +1377,7 @@ function TestResults() {
                       type="date"
                       value={labRequestFilters.to_date || ""}
                       onChange={(e) =>
-                        handleFilterChange("to_date", e.target.value || null)
+                        handleRequestFilterChange("to_date", e.target.value || null)
                       }
                       className="pl-10 block w-full py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm"
                     />
@@ -1247,7 +1390,7 @@ function TestResults() {
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={resetFilters}
+                onClick={resetRequestFilters}
                 className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
               >
                 Reset Filters
@@ -1264,7 +1407,7 @@ function TestResults() {
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={applyFilters}
+                  onClick={applyRequestFilters}
                   className="px-4 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg hover:from-teal-600 hover:to-emerald-600 transition-colors font-medium shadow-md hover:shadow-lg"
                 >
                   Apply Filters
@@ -1277,9 +1420,9 @@ function TestResults() {
     );
   };
 
-  // Render pagination controls for lab requests
-  const renderPagination = () => {
-    if (pagination.pages <= 1) return null;
+  // Render pagination controls
+  const renderPagination = (paginationData, onPageChange) => {
+    if (paginationData.pages <= 1) return null;
 
     return (
       <div className="flex items-center justify-between my-6">
@@ -1287,10 +1430,10 @@ function TestResults() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => handlePageChange(pagination.page - 1)}
-            disabled={pagination.page <= 1}
+            onClick={() => onPageChange(paginationData.page - 1)}
+            disabled={paginationData.page <= 1}
             className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md transition-colors ${
-              pagination.page <= 1
+              paginationData.page <= 1
                 ? "text-gray-400 bg-gray-50 border-gray-200 dark:text-gray-500 dark:bg-gray-800 dark:border-gray-700 cursor-not-allowed"
                 : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700"
             }`}
@@ -1300,10 +1443,10 @@ function TestResults() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => handlePageChange(pagination.page + 1)}
-            disabled={pagination.page >= pagination.pages}
+            onClick={() => onPageChange(paginationData.page + 1)}
+            disabled={paginationData.page >= paginationData.pages}
             className={`ml-3 relative inline-flex items-center px-4 py-2 border text-sm font-medium rounded-md transition-colors ${
-              pagination.page >= pagination.pages
+              paginationData.page >= paginationData.pages
                 ? "text-gray-400 bg-gray-50 border-gray-200 dark:text-gray-500 dark:bg-gray-800 dark:border-gray-700 cursor-not-allowed"
                 : "text-gray-700 bg-white border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700"
             }`}
@@ -1317,16 +1460,16 @@ function TestResults() {
               Showing 
               <span className="font-medium mx-1">
                 {Math.min(
-                  (pagination.page - 1) * pagination.size + 1,
-                  pagination.total
+                  (paginationData.page - 1) * paginationData.size + 1,
+                  paginationData.total
                 )}
               </span>
               to
               <span className="font-medium mx-1">
-                {Math.min(pagination.page * pagination.size, pagination.total)}
+                {Math.min(paginationData.page * paginationData.size, paginationData.total)}
               </span>
               of 
-              <span className="font-medium mx-1">{pagination.total}</span>
+              <span className="font-medium mx-1">{paginationData.total}</span>
               results
             </p>
           </div>
@@ -1338,10 +1481,10 @@ function TestResults() {
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page <= 1}
+                onClick={() => onPageChange(paginationData.page - 1)}
+                disabled={paginationData.page <= 1}
                 className={`relative inline-flex items-center px-2 py-2 rounded-l-md border text-sm font-medium ${
-                  pagination.page <= 1
+                  paginationData.page <= 1
                     ? "text-gray-400 bg-gray-50 border-gray-200 dark:text-gray-500 dark:bg-gray-800 dark:border-gray-700 cursor-not-allowed"
                     : "text-gray-500 bg-white border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700"
                 }`}
@@ -1352,27 +1495,27 @@ function TestResults() {
               </motion.button>
 
               {/* Page buttons */}
-              {[...Array(pagination.pages)].map((_, i) => {
+              {[...Array(paginationData.pages)].map((_, i) => {
                 const pageNum = i + 1;
-                const isCurrent = pageNum === pagination.page;
+                const isCurrent = pageNum === paginationData.page;
 
                 // For many pages, show limited buttons with ellipses
-                if (pagination.pages > 7) {
+                if (paginationData.pages > 7) {
                   if (
                     pageNum === 1 ||
-                    pageNum === pagination.pages ||
-                    (pageNum >= pagination.page - 1 &&
-                      pageNum <= pagination.page + 1) ||
-                    (pagination.page <= 3 && pageNum <= 4) ||
-                    (pagination.page >= pagination.pages - 2 &&
-                      pageNum >= pagination.pages - 3)
+                    pageNum === paginationData.pages ||
+                    (pageNum >= paginationData.page - 1 &&
+                      pageNum <= paginationData.page + 1) ||
+                    (paginationData.page <= 3 && pageNum <= 4) ||
+                    (paginationData.page >= paginationData.pages - 2 &&
+                      pageNum >= paginationData.pages - 3)
                   ) {
                     return (
                       <motion.button
                         key={pageNum}
                         whileHover={{ scale: isCurrent ? 1 : 1.1 }}
                         whileTap={{ scale: isCurrent ? 1 : 0.9 }}
-                        onClick={() => handlePageChange(pageNum)}
+                        onClick={() => onPageChange(pageNum)}
                         className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                           isCurrent
                             ? "z-10 bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-500 text-white"
@@ -1384,9 +1527,9 @@ function TestResults() {
                       </motion.button>
                     );
                   } else if (
-                    (pageNum === 2 && pagination.page > 4) ||
-                    (pageNum === pagination.pages - 1 &&
-                      pagination.page < pagination.pages - 3)
+                    (pageNum === 2 && paginationData.page > 4) ||
+                    (pageNum === paginationData.pages - 1 &&
+                      paginationData.page < paginationData.pages - 3)
                   ) {
                     return (
                       <span
@@ -1406,7 +1549,7 @@ function TestResults() {
                     key={pageNum}
                     whileHover={{ scale: isCurrent ? 1 : 1.1 }}
                     whileTap={{ scale: isCurrent ? 1 : 0.9 }}
-                    onClick={() => handlePageChange(pageNum)}
+                    onClick={() => onPageChange(pageNum)}
                     className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                       isCurrent
                         ? "z-10 bg-gradient-to-r from-teal-500 to-emerald-500 border-teal-500 text-white"
@@ -1422,10 +1565,10 @@ function TestResults() {
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page >= pagination.pages}
+                onClick={() => onPageChange(paginationData.page + 1)}
+                disabled={paginationData.page >= paginationData.pages}
                 className={`relative inline-flex items-center px-2 py-2 rounded-r-md border text-sm font-medium ${
-                  pagination.page >= pagination.pages
+                  paginationData.page >= paginationData.pages
                     ? "text-gray-400 bg-gray-50 border-gray-200 dark:text-gray-500 dark:bg-gray-800 dark:border-gray-700 cursor-not-allowed"
                     : "text-gray-500 bg-white border-gray-300 hover:bg-gray-50 dark:text-gray-300 dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700"
                 }`}
@@ -1481,7 +1624,7 @@ function TestResults() {
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
-                onClick={() => fetchLabRequests(pagination.page)}
+                onClick={() => fetchLabRequests(labRequestPagination.page)}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
                 aria-label="Refresh lab requests"
               >
@@ -1554,7 +1697,7 @@ function TestResults() {
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={resetFilters}
+                  onClick={resetRequestFilters}
                   className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors duration-200 flex items-center gap-2"
                 >
                   <FiX className="h-4 w-4" />
@@ -1632,28 +1775,35 @@ function TestResults() {
                           <PriorityBadge priority={request.priority} />
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                          {formatDate(request.requested_at)}
+                          {formatDate(request.created_at)}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                              // Close all modals first
-                              closeAllModals();
-                              // Set the form data for result creation
-                              setFormData({
-                                lab_request_id: request.id,
-                                result_data: {},
-                                conclusion: "",
-                              });
-                              setShowCreateModal(true);
-                            }}
-                            className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-colors duration-200 shadow-sm hover:shadow-md"
-                          >
-                            <FiPlus className="mr-1.5 h-4 w-4" />
-                            Enter Results
-                          </motion.button>
+                          {request.status !== "completed" && (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                // Close all modals first
+                                closeAllModals();
+                                // Set the form data for result creation
+                                setFormData({
+                                  lab_request_id: request.id,
+                                  result_data: {},
+                                  conclusion: "",
+                                });
+                                setShowCreateModal(true);
+                              }}
+                              className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white text-sm font-medium rounded-lg transition-colors duration-200 shadow-sm hover:shadow-md"
+                            >
+                              <FiPlus className="mr-1.5 h-4 w-4" />
+                              Enter Results
+                            </motion.button>
+                          )}
+                          {request.status === "completed" && (
+                            <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                              Complete
+                            </div>
+                          )}
                         </td>
                       </motion.tr>
                     ))}
@@ -1661,7 +1811,7 @@ function TestResults() {
                 </table>
               </div>
 
-              {renderPagination()}
+              {renderPagination(labRequestPagination, handleLabRequestPageChange)}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1672,9 +1822,6 @@ function TestResults() {
   // Render detail modal
   const renderDetailModal = () => {
     if (!showDetailModal || !selectedResult) return null;
-
-    const resultData = selectedResult.result_data || {};
-    const status = getStatusLabel(selectedResult);
 
     return (
       <AnimatePresence>
@@ -1713,89 +1860,37 @@ function TestResults() {
                 <div>
                   <h3 className="text-base font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-1.5">
                     <FiUser className="h-4 w-4 text-purple-500" />
-                    Patient Information
+                    Lab Request Information
                   </h3>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                          Name
+                          Lab Request ID
                         </p>
                         <p className="font-medium text-gray-900 dark:text-white">
-                          {selectedResult.patient_details?.name || "N/A"}
+                          {selectedResult.lab_request_id?.substring(0, 8) || "N/A"}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                          ID
+                          Result ID
                         </p>
                         <p className="font-medium text-gray-900 dark:text-white">
-                          {selectedResult.patient_details?.id?.substring(0, 8) || "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                          Age
-                        </p>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {selectedResult.patient_details?.age || "N/A"} years
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                          Gender
-                        </p>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {selectedResult.patient_details?.gender || "N/A"}
+                          {selectedResult.id?.substring(0, 8) || "N/A"}
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <h3 className="text-base font-medium text-gray-900 dark:text-white mt-6 mb-3 flex items-center gap-1.5">
-                    <MdOutlineBiotech className="h-4 w-4 text-teal-500" />
-                    Test Information
+                    <FiInfo className="h-4 w-4 text-amber-500" />
+                    Conclusion
                   </h3>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-600">
-                        <div>
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                            Test ID
-                          </p>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {selectedResult.id?.substring(0, 8) || "N/A"}
-                          </p>
-                        </div>
-                        <ResultStatusBadge status={status} />
-                      </div>
-                      <div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                              Test Type
-                            </p>
-                            <div className="flex items-center">
-                              {getTestTypeIcon(selectedResult.lab_request?.test_type)}
-                              <p className="font-medium text-gray-900 dark:text-white ml-1.5">
-                                {selectedResult.lab_request?.test_type?.replace(/_/g, ' ') || "N/A"}
-                              </p>
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1">
-                              Date
-                            </p>
-                            <div className="flex items-center">
-                              <FiCalendar className="h-4 w-4 text-gray-400 mr-1.5" />
-                              <p className="font-medium text-gray-900 dark:text-white">
-                                {formatDate(selectedResult.created_at)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-line">
+                      {selectedResult.conclusion || "No conclusion provided"}
+                    </p>
                   </div>
                 </div>
 
@@ -1805,7 +1900,7 @@ function TestResults() {
                     Test Results
                   </h3>
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm">
-                    {Object.keys(resultData).length > 0 ? (
+                    {Object.keys(selectedResult.result_data || {}).length > 0 ? (
                       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                         <thead>
                           <tr>
@@ -1818,50 +1913,39 @@ function TestResults() {
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                               Normal Range
                             </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                              Recorded At
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                          {Object.entries(resultData).map(([key, data], index) => (
-                            <motion.tr 
-                              key={key}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: index * 0.05 }}
-                            >
-                              <td className="px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 font-medium">
-                                {key}
-                              </td>
-                              <td className="px-3 py-2.5 text-sm">
-                                {typeof data === "object" ? (
-                                  <span
-                                    className={
-                                      data.value >
-                                        (data.normal_range?.max || Infinity) ||
-                                      data.value <
-                                        (data.normal_range?.min || -Infinity)
-                                        ? "text-rose-600 dark:text-rose-400 font-medium"
-                                        : "text-emerald-600 dark:text-emerald-400 font-medium"
-                                    }
-                                  >
+                          {Object.entries(selectedResult.result_data || {}).map(([key, data], index) => {
+                            const isNormal = isValueNormal(data.value, data.normal_range);
+                            
+                            return (
+                              <motion.tr 
+                                key={key}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                              >
+                                <td className="px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 font-medium">
+                                  {key}
+                                </td>
+                                <td className="px-3 py-2.5 text-sm">
+                                  <span className={isNormal ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-rose-600 dark:text-rose-400 font-medium"}>
                                     {data.value} {data.unit || ""}
                                   </span>
-                                ) : (
-                                  <span className="text-gray-900 dark:text-gray-100">
-                                    {data}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
-                                {typeof data === "object" && data.normal_range
-                                  ? typeof data.normal_range === "object"
-                                    ? `${data.normal_range.min || ""} - ${
-                                        data.normal_range.max || ""
-                                      }`
-                                    : data.normal_range
-                                  : "N/A"}
-                              </td>
-                            </motion.tr>
-                          ))}
+                                </td>
+                                <td className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                  {data.normal_range || "N/A"}
+                                </td>
+                                <td className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
+                                  {formatDate(data.recorded_at)}
+                                </td>
+                              </motion.tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     ) : (
@@ -1874,16 +1958,6 @@ function TestResults() {
                         </p>
                       </div>
                     )}
-                  </div>
-
-                  <h3 className="text-base font-medium text-gray-900 dark:text-white mt-6 mb-3 flex items-center gap-1.5">
-                    <FiInfo className="h-4 w-4 text-amber-500" />
-                    Conclusion
-                  </h3>
-                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <p className="text-gray-800 dark:text-gray-200 whitespace-pre-line">
-                      {selectedResult.conclusion || "No conclusion provided"}
-                    </p>
                   </div>
                 </div>
               </div>
@@ -2284,7 +2358,7 @@ function TestResults() {
                     <option value="">-- Select a lab request --</option>
                     {labRequests.map((request) => (
                       <option key={request.id} value={request.id}>
-                        {request.test_type.replace(/_/g, ' ')} - {request.patient_id.substring(0, 8)} - {formatDate(request.requested_at)}
+                        {request.test_type.replace(/_/g, ' ')} - {request.patient_id.substring(0, 8)} - {formatDate(request.created_at)}
                       </option>
                     ))}
                   </select>
@@ -2354,10 +2428,7 @@ function TestResults() {
                               type="text"
                               value={data.value || ""}
                               onChange={(e) =>
-                                handleResultDataChange(key, {
-                                  ...formData.result_data[key],
-                                  value: e.target.value,
-                                })
+                                handleResultDataChange(key, "value", e.target.value)
                               }
                               className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-teal-500 focus:ring focus:ring-teal-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                               placeholder="Enter value"
@@ -2372,10 +2443,7 @@ function TestResults() {
                               type="text"
                               value={data.unit || ""}
                               onChange={(e) =>
-                                handleResultDataChange(key, {
-                                  ...formData.result_data[key],
-                                  unit: e.target.value,
-                                })
+                                handleResultDataChange(key, "unit", e.target.value)
                               }
                               className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-teal-500 focus:ring focus:ring-teal-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                               placeholder="e.g. mg/dL"
@@ -2388,31 +2456,10 @@ function TestResults() {
                             </label>
                             <input
                               type="text"
-                              value={
-                                typeof data.normal_range === "object"
-                                  ? `${data.normal_range.min || ""} - ${
-                                      data.normal_range.max || ""
-                                    }`
-                                  : data.normal_range || ""
+                              value={data.normal_range || ""}
+                              onChange={(e) =>
+                                handleResultDataChange(key, "normal_range", e.target.value)
                               }
-                              onChange={(e) => {
-                                const rangeText = e.target.value;
-                                let rangeValue;
-
-                                if (rangeText.includes("-")) {
-                                  const [min, max] = rangeText
-                                    .split("-")
-                                    .map((s) => s.trim());
-                                  rangeValue = { min, max };
-                                } else {
-                                  rangeValue = rangeText;
-                                }
-
-                                handleResultDataChange(key, {
-                                  ...formData.result_data[key],
-                                  normal_range: rangeValue,
-                                });
-                              }}
                               className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-teal-500 focus:ring focus:ring-teal-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                               placeholder="e.g. 70 - 120"
                             />
@@ -2547,7 +2594,7 @@ function TestResults() {
                 </div>
 
                 <div className="space-y-4">
-                  {Object.entries(formData.result_data).map(([key, data], index) => (
+                  {Object.entries(formData.result_data || {}).map(([key, data], index) => (
                     <motion.div
                       key={key}
                       className="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-700/50 shadow-sm"
@@ -2587,10 +2634,7 @@ function TestResults() {
                             type="text"
                             value={data.value || ""}
                             onChange={(e) =>
-                              handleResultDataChange(key, {
-                                ...formData.result_data[key],
-                                value: e.target.value,
-                              })
+                              handleResultDataChange(key, "value", e.target.value)
                             }
                             className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                             placeholder="Enter value"
@@ -2605,10 +2649,7 @@ function TestResults() {
                             type="text"
                             value={data.unit || ""}
                             onChange={(e) =>
-                              handleResultDataChange(key, {
-                                ...formData.result_data[key],
-                                unit: e.target.value,
-                              })
+                              handleResultDataChange(key, "unit", e.target.value)
                             }
                             className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                             placeholder="e.g. mg/dL"
@@ -2621,31 +2662,10 @@ function TestResults() {
                           </label>
                           <input
                             type="text"
-                            value={
-                              typeof data.normal_range === "object"
-                                ? `${data.normal_range.min || ""} - ${
-                                    data.normal_range.max || ""
-                                  }`
-                                : data.normal_range || ""
+                            value={data.normal_range || ""}
+                            onChange={(e) =>
+                              handleResultDataChange(key, "normal_range", e.target.value)
                             }
-                            onChange={(e) => {
-                              const rangeText = e.target.value;
-                              let rangeValue;
-
-                              if (rangeText.includes("-")) {
-                                const [min, max] = rangeText
-                                  .split("-")
-                                  .map((s) => s.trim());
-                                rangeValue = { min, max };
-                              } else {
-                                rangeValue = rangeText;
-                              }
-
-                              handleResultDataChange(key, {
-                                ...formData.result_data[key],
-                                normal_range: rangeValue,
-                              });
-                            }}
                             className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                             placeholder="e.g. 70 - 120"
                           />
@@ -2654,7 +2674,7 @@ function TestResults() {
                     </motion.div>
                   ))}
 
-                  {Object.keys(formData.result_data).length === 0 && (
+                  {Object.keys(formData.result_data || {}).length === 0 && (
                     <motion.div 
                       className="bg-gray-50 dark:bg-gray-700/30 p-8 rounded-xl text-center border border-dashed border-gray-300 dark:border-gray-600"
                       initial={{ opacity: 0 }}
@@ -2762,14 +2782,15 @@ function TestResults() {
                 <div className="w-full bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-100 dark:border-gray-700 mb-4">
                   <div className="flex items-start">
                     <div className="flex-shrink-0 mr-3">
-                      {getTestTypeIcon(selectedResult.lab_request?.test_type)}
+                      <MdOutlineBiotech className="h-5 w-5 text-gray-500" />
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {selectedResult.lab_request?.test_type?.replace(/_/g, ' ') || "Unknown Test"}
+                        {/* Display the first parameter name or "Unknown Test" */}
+                        {Object.keys(selectedResult.result_data || {})[0] || "Unknown Test"}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        ID: {selectedResult.id?.substring(0, 8) || "N/A"} | Patient: {selectedResult.patient_details?.name || "Unknown"}
+                        ID: {selectedResult.id?.substring(0, 8) || "N/A"}
                       </p>
                     </div>
                   </div>
@@ -2879,7 +2900,7 @@ function TestResults() {
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={fetchLabResults}
+                  onClick={() => fetchLabResults(labResultPagination.page)}
                   className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-200"
                 >
                   <FiRefreshCw
@@ -2900,7 +2921,7 @@ function TestResults() {
                 type="text"
                 ref={searchInputRef}
                 className="block w-full pl-10 pr-3 py-2.5 text-base border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 rounded-lg shadow-sm transition-colors placeholder-gray-400 dark:placeholder-gray-500"
-                placeholder="Search by patient name, ID, test type or conclusion..."
+                placeholder="Search by parameter, conclusion or ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -2919,6 +2940,9 @@ function TestResults() {
             <div className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700">
               {renderResultsTable()}
             </div>
+            
+            {/* Lab Results Pagination */}
+            {renderPagination(labResultPagination, handleLabResultPageChange)}
           </div>
         </motion.div>
 
