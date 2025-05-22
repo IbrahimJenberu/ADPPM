@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   FiSearch, FiCheckCircle, FiClock, FiAlertCircle, FiFileText, 
-  FiUserPlus, FiFilter, FiCalendar, FiX, 
+  FiFilter, FiCalendar, FiX, 
   FiBell, FiChevronDown, FiChevronUp, FiChevronLeft, FiChevronRight, 
   FiSettings, FiDownload, FiActivity, FiEdit, FiTrash2, FiSave,
   FiInfo, FiPlay
@@ -1074,7 +1074,6 @@ const ConfirmationModal = React.memo(({
 const LabRequestRow = React.memo(({ 
   request, 
   onViewDetails, 
-  onAssign, 
   onUpdateStatus,
   onDeleteRequest,
   currentTechnicianId,
@@ -1155,18 +1154,6 @@ const LabRequestRow = React.memo(({
           >
             <FiFileText className="h-4 w-4" />
           </button>
-          
-          {/* Assign to self action (if not assigned) */}
-          {!request.technician_id && (
-            <button
-              onClick={() => onAssign(request.id)}
-              className="p-1.5 rounded-full text-purple-600 hover:text-purple-800 hover:bg-purple-100 transition-colors"
-              title="Assign to Me"
-              type="button"
-            >
-              <FiUserPlus className="h-4 w-4" />
-            </button>
-          )}
           
           {/* Status change actions - only show for assigned technician */}
           {request.technician_id === currentTechnicianId && (
@@ -1406,6 +1393,297 @@ const WebSocketStatus = ({ status, messagesReceived, activeConnections, onReconn
     </div>
   );
 };
+
+// Updated Detail modal component with compact design and no "Assign to me" button
+const DetailModal = React.memo(({ 
+  request, 
+  onClose, 
+  onUpdateStatus,
+  onDelete,
+  formatDate,
+  currentTechnicianId,
+  isEditMode,
+  editData,
+  setEditData,
+  onSaveChanges,
+  onToggleEditMode
+}) => {
+  if (!request) return null;
+  
+  // Simplified ID display function
+  const formatId = (id) => {
+    if (!id) return 'N/A';
+    // Split the ID into chunks for better readability
+    return `${id.slice(0, 4)}-${id.slice(-4)}`;
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto border border-gray-200"
+      >
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex justify-between items-center rounded-t-xl backdrop-blur-lg bg-opacity-90">
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-blue-100 text-blue-600">
+              <MdOutlineBiotech className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 flex items-center">
+                {TEST_TYPES[request.test_type] || request.test_type}
+                <span className="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded-full text-gray-600 font-normal">
+                  {formatId(request.id)}
+                </span>
+              </h2>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            aria-label="Close"
+            type="button"
+          >
+            <FiX className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="p-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 shadow-sm">
+              <div className="flex justify-between mb-1">
+                <span className="text-xs text-gray-500">Status</span>
+                {isEditMode ? (
+                  <select
+                    value={editData.status}
+                    onChange={(e) => setEditData({...editData, status: e.target.value})}
+                    className="text-xs px-2 py-0.5 rounded border-gray-200 bg-white"
+                    disabled={request.status === "COMPLETED"}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="canceled">Cancelled</option>
+                  </select>
+                ) : (
+                  <StatusBadge status={request.status} />
+                )}
+              </div>
+              <div className="flex justify-between mb-1 mt-2">
+                <span className="text-xs text-gray-500">Priority</span>
+                {isEditMode ? (
+                  <select
+                    value={editData.priority}
+                    onChange={(e) => setEditData({...editData, priority: e.target.value})}
+                    className="text-xs px-2 py-0.5 rounded border-gray-200 bg-white"
+                  >
+                    <option value="ROUTINE">Routine</option>
+                    <option value="URGENT">Urgent</option>
+                    <option value="EMERGENCY">Emergency</option>
+                  </select>
+                ) : (
+                  <PriorityBadge priority={request.priority} />
+                )}
+              </div>
+              <div className="flex justify-between mb-1 mt-2">
+                <span className="text-xs text-gray-500">Requested At</span>
+                <span className="text-xs text-gray-700">{formatDate(request.requested_at || request.created_at)}</span>
+              </div>
+              {request.due_date && (
+                <div className="flex justify-between mb-1 mt-2">
+                  <span className="text-xs text-gray-500">Due Date</span>
+                  <span className={`text-xs ${new Date(request.due_date) < new Date() ? 'text-red-600 font-medium' : 'text-gray-700'}`}>
+                    {formatDate(request.due_date)}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 shadow-sm">
+              <div className="text-xs text-gray-500 mb-1">Patient ID</div>
+              <div className="text-sm font-medium text-gray-900 mb-2">{request.patient_id}</div>
+              
+              {(request.patient_details?.age || request.patient_age) && (
+                <div className="flex justify-between mb-1 mt-2">
+                  <span className="text-xs text-gray-500">Age</span>
+                  <span className="text-xs text-gray-700">{request.patient_details?.age || request.patient_age}</span>
+                </div>
+              )}
+              
+              {(request.patient_details?.gender || request.patient_gender) && (
+                <div className="flex justify-between mb-1 mt-2">
+                  <span className="text-xs text-gray-500">Gender</span>
+                  <span className="text-xs text-gray-700">{request.patient_details?.gender || request.patient_gender}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Request Notes */}
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-sm font-medium text-gray-900">Notes</h3>
+              {!isEditMode && request.status !== "COMPLETED" && (
+                <button
+                  onClick={onToggleEditMode}
+                  className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                  type="button"
+                >
+                  <FiEdit className="mr-1 h-3 w-3" /> Edit
+                </button>
+              )}
+            </div>
+            
+            <div className="bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
+              {isEditMode ? (
+                <textarea
+                  value={editData.notes}
+                  onChange={(e) => setEditData({...editData, notes: e.target.value})}
+                  className="block w-full p-3 rounded-lg border-gray-200 bg-white text-sm"
+                  rows={3}
+                  placeholder="Enter notes about this lab request..."
+                />
+              ) : (
+                <div className="p-3">
+                  {request.notes ? (
+                    <p className="text-sm whitespace-pre-line text-gray-700">{request.notes}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No notes provided</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Lab Result (if available) */}
+          {request.lab_result && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center">
+                <FiCheckCircle className="mr-1.5 h-4 w-4 text-green-500" />
+                Lab Results
+              </h3>
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 shadow-sm">
+                <div className="grid grid-cols-2 gap-4 mb-2">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Result Date</p>
+                    <p className="text-sm text-gray-700">{formatDate(request.lab_result.created_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Result Status</p>
+                    <p className="text-sm text-gray-700">{request.lab_result.status}</p>
+                  </div>
+                </div>
+                
+                {request.lab_result.result_data && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-1">Result Data</p>
+                    <pre className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-24 whitespace-pre-wrap break-all border border-gray-200">
+                      {typeof request.lab_result.result_data === 'object' 
+                        ? JSON.stringify(request.lab_result.result_data, null, 2)
+                        : request.lab_result.result_data}
+                    </pre>
+                  </div>
+                )}
+                
+                {request.lab_result.images && request.lab_result.images.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-1">Images</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {request.lab_result.images.map((image, idx) => (
+                        <div key={idx} className="border rounded overflow-hidden bg-white border-gray-200 shadow-sm">
+                          <img 
+                            src={image.file_path || image.url} 
+                            alt={`Result ${idx + 1}`}
+                            className="w-full h-auto"
+                          />
+                          <div className="p-1 text-xs text-center">
+                            <a 
+                              href={image.file_path || image.url} 
+                              download
+                              className="text-blue-600 hover:underline"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <FiDownload className="inline h-3 w-3 mr-1" />
+                              Download
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Action buttons */}
+          <div className="flex justify-end space-x-2 mt-4 pt-3 border-t border-gray-100">
+            {isEditMode ? (
+              <>
+                <button
+                  onClick={onToggleEditMode}
+                  className="px-3 py-1.5 rounded-lg text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors flex items-center shadow-sm"
+                  type="button"
+                >
+                  <FiX className="mr-1.5 h-4 w-4" /> Cancel
+                </button>
+                
+                <button
+                  onClick={onSaveChanges}
+                  className="px-3 py-1.5 rounded-lg text-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center shadow-sm"
+                  type="button"
+                >
+                  <FiSave className="mr-1.5 h-4 w-4" /> Save
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Status change buttons - only for assigned technician */}
+                {request.technician_id === currentTechnicianId && (
+                  <>
+                    {request.status === 'PENDING' && (
+                      <button
+                        onClick={() => onUpdateStatus(request.id, 'IN_PROGRESS')}
+                        className="px-3 py-1.5 rounded-lg text-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center shadow-sm"
+                        type="button"
+                      >
+                        <FiActivity className="mr-1.5 h-4 w-4" /> Start Processing
+                      </button>
+                    )}
+                    
+                    {request.status === 'IN_PROGRESS' && (
+                      <button
+                        onClick={() => onUpdateStatus(request.id, 'COMPLETED')}
+                        className="px-3 py-1.5 rounded-lg text-sm text-white bg-green-600 hover:bg-green-700 transition-colors flex items-center shadow-sm"
+                        type="button"
+                      >
+                        <FiCheckCircle className="mr-1.5 h-4 w-4" /> Complete
+                      </button>
+                    )}
+                  </>
+                )}
+                
+                {/* Delete button - only for non-completed requests */}
+                {request.status !== 'COMPLETED' && (
+                  <button
+                    onClick={() => onDelete(request.id, TEST_TYPES[request.test_type] || request.test_type)}
+                    className="px-3 py-1.5 rounded-lg text-sm text-white bg-red-600 hover:bg-red-700 transition-colors flex items-center shadow-sm"
+                    type="button"
+                  >
+                    <FiTrash2 className="mr-1.5 h-4 w-4" /> Delete
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+});
 
 // Main component
 function LabRequestsList() {
@@ -1780,11 +2058,16 @@ function LabRequestsContent() {
       }
     } finally {
       setLoading(false);
+      fetchInProgressRef.current = false;
     }
   }, [page, pageSize, statusFilter, priorityFilter, testTypeFilter, dateRangeFilter, currentTechnicianId, notify, detectNewRequests, notificationsEnabled, initialDataLoaded, isChangingPage]);
 
+  // Flag to track if a fetch is in progress
+  const fetchInProgressRef = useRef(false);
+
   // Load data immediately on mount
   useEffect(() => {
+    fetchInProgressRef.current = true;
     // Fetch real data immediately
     fetchLabRequests(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1792,7 +2075,8 @@ function LabRequestsContent() {
 
   // Refetch when pagination changes, but with safeguards for during the change
   useEffect(() => {
-    if (initialDataLoaded && !isChangingPage) {
+    if (initialDataLoaded && !isChangingPage && !fetchInProgressRef.current) {
+      fetchInProgressRef.current = true;
       fetchLabRequests(true);
     }
   }, [page, pageSize, fetchLabRequests, initialDataLoaded, isChangingPage]);
@@ -1884,6 +2168,7 @@ function LabRequestsContent() {
       
       // Refresh the data after a short delay to ensure backend processed the update
       setTimeout(() => {
+        fetchInProgressRef.current = false;
         fetchLabRequests(false, currentPageRef.current);
         
         // If detail view is open, refresh it
@@ -1897,69 +2182,7 @@ function LabRequestsContent() {
       notify('Failed to update request status', 'error');
       
       // Revert optimistic update on failure
-      fetchLabRequests(false, currentPageRef.current);
-      
-      // If detail view is open, refresh it
-      if (selectedRequest && selectedRequest.id === requestId) {
-        fetchRequestDetails(requestId);
-      }
-    }
-  }, [currentTechnicianId, selectedRequest, fetchLabRequests, fetchRequestDetails, notify, toast]);
-
-  // Assign request to current technician
-  const assignToSelf = useCallback(async (requestId) => {
-    // Optimistically update local state
-    setLabRequests(prevRequests => 
-      prevRequests.map(request => 
-        request.id === requestId 
-          ? { ...request, technician_id: currentTechnicianId, status: 'IN_PROGRESS' } 
-          : request
-      )
-    );
-    
-    // Update selected request if detail modal is open
-    if (selectedRequest && selectedRequest.id === requestId) {
-      setSelectedRequest(prev => ({ 
-        ...prev, 
-        technician_id: currentTechnicianId,
-        status: 'IN_PROGRESS'
-      }));
-      setEditRequestData(prev => ({
-        ...prev,
-        technician_id: currentTechnicianId,
-        status: 'IN_PROGRESS'
-      }));
-    }
-    
-    const loadingToast = notify('Assigning request to you...', 'loading');
-    
-    try {
-      await axios.patch(
-        `http://localhost:8025/api/lab-requests/${requestId}?labtechnician_id=${currentTechnicianId}`,
-        { 
-          technician_id: currentTechnicianId,
-          status: 'IN_PROGRESS'
-        }
-      );
-      
-      toast.remove(loadingToast);
-      notify('Request assigned to you', 'success');
-      
-      // Refresh the data after a short delay
-      setTimeout(() => {
-        fetchLabRequests(false, currentPageRef.current);
-        
-        // If detail view is open, refresh it
-        if (selectedRequest && selectedRequest.id === requestId) {
-          fetchRequestDetails(requestId);
-        }
-      }, 500);
-    } catch (err) {
-      console.error('Failed to assign request:', err);
-      toast.remove(loadingToast);
-      notify('Failed to assign request', 'error');
-      
-      // Revert optimistic update on failure
+      fetchInProgressRef.current = false;
       fetchLabRequests(false, currentPageRef.current);
       
       // If detail view is open, refresh it
@@ -1988,6 +2211,7 @@ function LabRequestsContent() {
       
       // Refresh the data
       setTimeout(() => {
+        fetchInProgressRef.current = false;
         fetchLabRequests(true, currentPageRef.current);
       }, 500);
       
@@ -2086,6 +2310,7 @@ function LabRequestsContent() {
       setIsEditMode(false);
       
       // Refresh the data
+      fetchInProgressRef.current = false;
       fetchLabRequests(false, currentPageRef.current);
       
       // Refresh the detail view
@@ -2151,356 +2376,6 @@ function LabRequestsContent() {
       );
     });
   }, [labRequests, searchTerm]);
-
-  // Detail modal component with edit functionality
-  const DetailModal = React.memo(({ 
-    request, 
-    onClose, 
-    onAssign, 
-    onUpdateStatus,
-    onDelete,
-    formatDate,
-    currentTechnicianId,
-    isEditMode,
-    editData,
-    setEditData,
-    onSaveChanges,
-    onToggleEditMode
-  }) => {
-    if (!request) return null;
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.2 }}
-          className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-200"
-        >
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-xl backdrop-blur-lg bg-opacity-90">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {isEditMode ? "Edit Lab Request" : "Lab Request Details"}
-            </h2>
-            <div className="flex items-center gap-2">
-              {!isEditMode && request.status !== "COMPLETED" && (
-                <button
-                  onClick={onToggleEditMode}
-                  className="p-1.5 rounded-full text-blue-600 hover:text-blue-800 hover:bg-blue-100 transition-colors"
-                  title="Edit Request"
-                  type="button"
-                >
-                  <FiEdit className="h-5 w-5" />
-                </button>
-              )}
-              <button 
-                onClick={onClose}
-                className="p-1.5 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                aria-label="Close"
-                type="button"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <h3 className="text-base font-medium text-gray-900 mb-3 flex items-center">
-                  <FiFileText className="mr-2 h-4 w-4 text-blue-500" />
-                  Request Information
-                </h3>
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Request ID</p>
-                      <p className="text-sm font-medium text-gray-900">{request.id}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Test Type</p>
-                      <p className="text-sm font-medium text-gray-900 flex items-center">
-                        <MdOutlineBiotech className="mr-1.5 h-4 w-4 text-blue-500" />
-                        {TEST_TYPES[request.test_type] || request.test_type}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Priority</p>
-                      {isEditMode ? (
-                        <select
-                          value={editData.priority}
-                          onChange={(e) => setEditData({...editData, priority: e.target.value})}
-                          className="block w-full rounded text-sm py-1.5 border-gray-300 bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="ROUTINE">Routine</option>
-                          <option value="URGENT">Urgent</option>
-                          <option value="EMERGENCY">Emergency</option>
-                        </select>
-                      ) : (
-                        <PriorityBadge priority={request.priority} />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Status</p>
-                      {isEditMode ? (
-                        <select
-                          value={editData.status}
-                          onChange={(e) => setEditData({...editData, status: e.target.value})}
-                          className="block w-full rounded text-sm py-1.5 border-gray-300 bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500"
-                          disabled={request.status === "COMPLETED"}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                          <option value="canceled">Cancelled</option>
-                        </select>
-                      ) : (
-                        <StatusBadge status={request.status} />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Requested At</p>
-                      <p className="text-sm font-medium text-gray-900">{formatDate(request.requested_at || request.created_at)}</p>
-                    </div>
-                    {request.due_date && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Due Date</p>
-                        <p className={`text-sm font-medium flex items-center ${
-                          new Date(request.due_date) < new Date() 
-                            ? 'text-red-600' 
-                            : 'text-gray-900'
-                        }`}>
-                          <FiCalendar className="mr-1.5 h-3.5 w-3.5" />
-                          {formatDate(request.due_date)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-1">
-                <h3 className="text-base font-medium text-gray-900 mb-3 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-                  </svg>
-                  Patient Information
-                </h3>
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 shadow-sm">
-                  {request.patient_details || request.patient_name ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Patient Name</p>
-                        <p className="text-sm font-medium text-gray-900">
-                          {request.patient_details?.full_name || 
-                           request.patient_name ||
-                           `${request.patient_details?.first_name || ''} ${request.patient_details?.last_name || ''}`}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Patient ID</p>
-                        <p className="text-sm font-medium text-gray-900">{request.patient_id}</p>
-                      </div>
-                      {(request.patient_details?.age || request.patient_age) && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Age</p>
-                          <p className="text-sm font-medium text-gray-900">{request.patient_details?.age || request.patient_age}</p>
-                        </div>
-                      )}
-                      {(request.patient_details?.gender || request.patient_gender) && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Gender</p>
-                          <p className="text-sm font-medium text-gray-900">{request.patient_details?.gender || request.patient_gender}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500">Patient information not available</p>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="text-base font-medium text-gray-900 mb-3 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                </svg>
-                Request Notes
-              </h3>
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 shadow-sm">
-                {isEditMode ? (
-                  <textarea
-                    value={editData.notes}
-                    onChange={(e) => setEditData({...editData, notes: e.target.value})}
-                    className="block w-full rounded border-gray-300 bg-white text-gray-900 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-                    rows={4}
-                    placeholder="Enter notes about this lab request..."
-                  />
-                ) : (
-                  request.notes ? (
-                    <p className="text-sm whitespace-pre-line text-gray-900">{request.notes}</p>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No notes provided</p>
-                  )
-                )}
-              </div>
-            </div>
-            
-            {request.diagnosis_notes && (
-              <div className="mt-6">
-                <h3 className="text-base font-medium text-gray-900 mb-3 flex items-center">
-                  <FiActivity className="h-4 w-4 mr-2 text-blue-500" />
-                  Diagnosis Notes
-                </h3>
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <p className="text-sm whitespace-pre-line text-gray-900">{request.diagnosis_notes}</p>
-                </div>
-              </div>
-            )}
-            
-            {request.lab_result && (
-              <div className="mt-6">
-                <h3 className="text-base font-medium text-gray-900 mb-3 flex items-center">
-                  <FiCheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                  Lab Results
-                </h3>
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Result Date</p>
-                      <p className="text-sm font-medium text-gray-900">{formatDate(request.lab_result.created_at)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Result Status</p>
-                      <p className="text-sm font-medium text-gray-900">{request.lab_result.status}</p>
-                    </div>
-                  </div>
-                  
-                  <h4 className="text-sm font-medium text-gray-900 mb-2">Result Data</h4>
-                  {request.lab_result.result_data ? (
-                    <pre className="bg-gray-100 p-3 rounded overflow-x-auto text-xs text-gray-900 border border-gray-200">
-                      {typeof request.lab_result.result_data === 'object' 
-                        ? JSON.stringify(request.lab_result.result_data, null, 2)
-                        : request.lab_result.result_data}
-                    </pre>
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No result data available</p>
-                  )}
-                  
-                  {request.lab_result.images && request.lab_result.images.length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium text-gray-900 mb-2">Images</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {request.lab_result.images.map((image, idx) => (
-                          <div key={idx} className="border rounded-lg overflow-hidden bg-white border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                            <img 
-                              src={image.file_path || image.url} 
-                              alt={`Result image ${idx + 1}`}
-                              className="w-full h-auto"
-                            />
-                            <div className="p-2 text-xs text-center text-gray-500">
-                              Image {idx + 1}
-                              <a 
-                                href={image.file_path || image.url} 
-                                download={`result-${request.id}-image-${idx + 1}`}
-                                className="ml-2 text-blue-600 hover:underline"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <FiDownload className="inline h-3 w-3" />
-                              </a>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            <div className="mt-8 border-t border-gray-200 pt-6 flex flex-wrap gap-3 justify-end">
-              {isEditMode ? (
-                <>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={onToggleEditMode}
-                    className="px-3 py-2 rounded-full text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors flex items-center shadow-sm"
-                    type="button"
-                  >
-                    <FiX className="mr-1.5 h-4 w-4" /> Cancel
-                  </motion.button>
-                  
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={onSaveChanges}
-                    className="px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 transition-colors flex items-center shadow-sm"
-                    type="button"
-                  >
-                    <FiSave className="mr-1.5 h-4 w-4" /> Save Changes
-                  </motion.button>
-                </>
-              ) : (
-                <>
-                  {!request.technician_id && (
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => onAssign(request.id)}
-                      className="px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 transition-colors flex items-center shadow-sm"
-                      type="button"
-                    >
-                      <FiUserPlus className="mr-1.5 h-4 w-4" /> Assign to Me
-                    </motion.button>
-                  )}
-                  
-                  {request.status === 'PENDING' && request.technician_id === currentTechnicianId && (
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => onUpdateStatus(request.id, 'IN_PROGRESS')}
-                      className="px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 transition-colors flex items-center shadow-sm"
-                      type="button"
-                    >
-                      <FiActivity className="mr-1.5 h-4 w-4" /> Start Processing
-                    </motion.button>
-                  )}
-                  
-                  {request.status === 'IN_PROGRESS' && request.technician_id === currentTechnicianId && (
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => onUpdateStatus(request.id, 'COMPLETED')}
-                      className="px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-colors flex items-center shadow-sm"
-                      type="button"
-                    >
-                      <FiCheckCircle className="mr-1.5 h-4 w-4" /> Complete
-                    </motion.button>
-                  )}
-                  
-                  {/* Delete button - only show for non-completed requests */}
-                  {request.status !== 'COMPLETED' && (
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => onDelete(request.id, TEST_TYPES[request.test_type] || request.test_type)}
-                      className="px-3 py-2 rounded-full text-sm font-medium text-white bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 transition-colors flex items-center shadow-sm"
-                      type="button"
-                    >
-                      <FiTrash2 className="mr-1.5 h-4 w-4" /> Delete Request
-                    </motion.button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  });
 
   // Loading skeleton screen
   const LoadingSkeleton = () => (
@@ -2784,7 +2659,10 @@ function LabRequestsContent() {
               <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Data</h3>
               <p className="text-gray-500 max-w-md mb-6">{error}</p>
               <motion.button 
-                onClick={() => fetchLabRequests(true, currentPageRef.current)}
+                onClick={() => {
+                  fetchInProgressRef.current = false;
+                  fetchLabRequests(true, currentPageRef.current);
+                }}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -2823,7 +2701,6 @@ function LabRequestsContent() {
                             request={request}
                             currentTechnicianId={currentTechnicianId}
                             onViewDetails={fetchRequestDetails}
-                            onAssign={assignToSelf}
                             onUpdateStatus={updateRequestStatus}
                             onDeleteRequest={handleDeleteConfirmation}
                             formatDate={formatDate}
@@ -2967,7 +2844,6 @@ function LabRequestsContent() {
                 setShowDetailModal(false);
                 setIsEditMode(false);
               }}
-              onAssign={assignToSelf}
               onUpdateStatus={updateRequestStatus}
               onDelete={handleDeleteConfirmation}
               formatDate={formatDate}

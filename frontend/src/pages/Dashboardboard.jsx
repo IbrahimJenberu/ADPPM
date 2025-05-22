@@ -27,12 +27,12 @@ import OPDAssignment from './CardRoom/OPDAssignment';
 import AdminDashboard from './Admin/AdminDashboard';
 import UserManagement from './Admin/UserManagement';
 import Analytics from './Admin/Analytics';
-import LabDashboard from './LabTech/LabTechDashboard';
-import LabRequestsList from './LabTech/TestRequests';
-import TestResults from './LabTech/TestResults';
-import LabPatients from './LabTech/LabPatients';
-import LabHistory from './LabTech/LabHistory';
-import LabReports from './LabTech/LabReports';
+import LabDashboard from './Doctor/LabTech/LabTechDashboard';
+import LabRequestsList from './Doctor/LabTech/TestRequests';
+import TestResults from './Doctor/LabTech/TestResults';
+import LabPatients from './Doctor/LabTech/LabPatients';
+import LabHistory from './Doctor/LabTech/LabHistory';
+import LabReports from './Doctor/LabTech/LabReports';
 import LabTests from './Doctor/LabTests';
 
 // Import high-quality fonts
@@ -48,7 +48,7 @@ const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 // Enhanced Toast Notification System
 const ToastContainer = ({ toasts, removeToast }) => {
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-4 right-4 z-[10] flex flex-col gap-3 pointer-events-none">
       <AnimatePresence>
         {toasts.map((toast) => (
           <motion.div
@@ -180,7 +180,7 @@ const Tooltip = ({ children, text, position = 'right', delay = 300, className = 
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.15 }}
-            className={`absolute z-[90] whitespace-nowrap ${positions[position]} px-3 py-1.5 text-xs font-medium text-white bg-slate-800/95 backdrop-blur-sm rounded-xl shadow-lg`}
+            className={`absolute z-[10] whitespace-nowrap ${positions[position]} px-3 py-1.5 text-xs font-medium text-white bg-slate-800/95 backdrop-blur-sm rounded-xl shadow-lg`}
           >
             {text}
             <div className={`absolute w-1.5 h-1.5 bg-slate-800/95 transform rotate-45 ${
@@ -240,7 +240,7 @@ const NavItem = ({ icon, text, path, isActive, onClick, collapsed }) => {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.15 }}
-                className="absolute left-full top-0 ml-2 rounded-xl bg-white dark:bg-slate-800 shadow-lg z-50 whitespace-nowrap"
+                className="absolute left-full top-0 ml-2 rounded-xl bg-white dark:bg-slate-800 shadow-lg z-10 whitespace-nowrap"
               >
                 <div className={`px-4 py-3 rounded-xl flex items-center ${
                   isActive 
@@ -1321,7 +1321,7 @@ function Dashboard() {
       {/* Main Content */}
       <div className={`flex-1 flex flex-col overflow-hidden ${windowWidth < 768 && sidebarOpen ? 'ml-[290px]' : windowWidth < 768 && !sidebarOpen ? 'ml-[80px]' : ''}`}>
         {/* Header */}
-        <header className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/30 shadow-sm z-20 h-16 sticky top-0">
+        <header className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-700/30 shadow-sm z-0 h-16 sticky top-0">
           <div className="h-full px-4 md:px-6 flex items-center justify-between">
             <div className="flex items-center">
               {!sidebarOpen && (
@@ -1366,7 +1366,7 @@ function Dashboard() {
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute inset-0 bg-white/95 dark:bg-slate-800/95 z-20 flex items-center px-4"
+                    className="absolute inset-0 bg-white/95 dark:bg-slate-800/95 z-0 flex items-center px-4"
                   >
                     <div className="relative flex-1">
                       <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">

@@ -14,7 +14,6 @@ import {
   FiImage,
   FiAlertCircle,
   FiAlertTriangle,
-  FiDownload,
   FiRefreshCw,
   FiChevronLeft,
   FiChevronRight,
@@ -37,7 +36,7 @@ import {
 } from "react-icons/md";
 import axios from "axios";
 import { format } from "date-fns";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../../contexts/AuthContext";
 
 // API base URL - replace with your actual API URL
 const API_BASE_URL = "http://localhost:8025/api";
@@ -234,6 +233,8 @@ function TestResults() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showFullImageModal, setShowFullImageModal] = useState(false);
+  const [fullImageUrl, setFullImageUrl] = useState('');
 
   // State for form data
   const [formData, setFormData] = useState({
@@ -248,6 +249,7 @@ function TestResults() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [imageValidationErrors, setImageValidationErrors] = useState([]);
 
   // State for lab requests pagination
   const [labRequestPagination, setLabRequestPagination] = useState({
@@ -355,6 +357,7 @@ function TestResults() {
     setShowDeleteConfirm(false);
     setShowImageModal(false);
     setShowFilterModal(false);
+    setShowFullImageModal(false);
   };
 
   // Filter results when searchTerm changes
@@ -747,8 +750,43 @@ function TestResults() {
     showToast("Lab result successfully deleted", "success");
   };
 
+  // Validate image file before upload
+  const validateImageFile = (file) => {
+    const errors = [];
+    
+    // Check if file exists
+    if (!file) {
+      errors.push("No file selected");
+      return errors;
+    }
+    
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      errors.push("File must be a valid image (JPEG, PNG, GIF, or WebP)");
+    }
+    
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      errors.push(`File size must be less than 10MB (current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB)`);
+    }
+    
+    return errors;
+  };
+
   // Upload an image for a lab result
   const uploadImage = async (resultId, file, description) => {
+    // Validate the image file first
+    const validationErrors = validateImageFile(file);
+    setImageValidationErrors(validationErrors);
+    
+    if (validationErrors.length > 0) {
+      // Display the first validation error
+      setUploadError(validationErrors[0]);
+      return Promise.reject(new Error(validationErrors[0]));
+    }
+    
     setIsUploading(true);
     setUploadProgress(0);
     setUploadError(null);
@@ -870,10 +908,27 @@ function TestResults() {
     setShowDeleteConfirm(true);
   };
 
+  // Handle viewing the full image
+  const handleViewFullImage = (imageUrl) => {
+    setFullImageUrl(imageUrl);
+    setShowFullImageModal(true);
+  };
+
   // Handle file selection for image upload
   const handleFileSelect = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedImage(e.target.files[0]);
+      const file = e.target.files[0];
+      const errors = validateImageFile(file);
+      
+      if (errors.length > 0) {
+        setImageValidationErrors(errors);
+        setUploadError(errors[0]);
+        return;
+      }
+      
+      setImageValidationErrors([]);
+      setUploadError(null);
+      setSelectedImage(file);
     }
   };
 
@@ -2003,22 +2058,12 @@ function TestResults() {
                         </div>
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center p-4">
                           <div className="flex gap-2 mb-2">
-                            <motion.a
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              href={image.file_path}
-                              download={image.file_name}
-                              className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-full"
-                              title="Download Image"
-                            >
-                              <FiDownload className="text-gray-800 dark:text-gray-200 h-4 w-4" />
-                            </motion.a>
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
                               className="p-2 bg-white/90 dark:bg-gray-800/90 rounded-full"
                               title="View Full Size"
-                              onClick={() => window.open(image.file_path, "_blank")}
+                              onClick={() => handleViewFullImage(image.file_path)}
                             >
                               <FiEye className="text-gray-800 dark:text-gray-200 h-4 w-4" />
                             </motion.button>
@@ -2136,6 +2181,7 @@ function TestResults() {
                     setShowImageModal(false);
                     setSelectedImage(null);
                     setUploadError(null);
+                    setImageValidationErrors([]);
                     setUploadProgress(0);
                     setShowDetailModal(true);
                   }}
@@ -2182,6 +2228,20 @@ function TestResults() {
                     </p>
                   </div>
                 </div>
+
+                {imageValidationErrors.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-2 text-sm text-rose-600 dark:text-rose-400"
+                  >
+                    <ul className="list-disc pl-5 space-y-1">
+                      {imageValidationErrors.map((error, index) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                    </ul>
+                  </motion.div>
+                )}
 
                 {selectedImage && (
                   <motion.div 
@@ -2269,10 +2329,11 @@ function TestResults() {
                   setShowImageModal(false);
                   setSelectedImage(null);
                   setUploadError(null);
+                  setImageValidationErrors([]);
                   // Show the detail modal again
                   setShowDetailModal(true);
                 }}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors mr-3 font-medium"
+                className="px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors mr-3 font-medium"
               >
                 Cancel
               </motion.button>
@@ -2280,9 +2341,9 @@ function TestResults() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleImageUpload}
-                disabled={!selectedImage || isUploading}
-                className={`px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg transition-colors shadow-md font-medium ${
-                  !selectedImage || isUploading
+                disabled={!selectedImage || isUploading || imageValidationErrors.length > 0}
+                className={`px-4 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg transition-colors shadow-md font-medium ${
+                  !selectedImage || isUploading || imageValidationErrors.length > 0
                     ? "opacity-50 cursor-not-allowed from-gray-400 to-gray-500"
                     : "hover:from-teal-600 hover:to-emerald-600 hover:shadow-lg"
                 }`}
@@ -2366,6 +2427,11 @@ function TestResults() {
                     <FiChevronRight className="h-5 w-5 transform rotate-90" />
                   </div>
                 </div>
+                {!formData.lab_request_id && (
+                  <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                    Please select a lab request
+                  </p>
+                )}
               </div>
 
               <div className="mb-6">
@@ -2432,6 +2498,7 @@ function TestResults() {
                               }
                               className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-teal-500 focus:ring focus:ring-teal-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                               placeholder="Enter value"
+                              required
                             />
                           </div>
 
@@ -2492,6 +2559,11 @@ function TestResults() {
                     </motion.button>
                   </motion.div>
                 )}
+                {Object.keys(formData.result_data).length === 0 && (
+                  <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                    Please add at least one test parameter
+                  </p>
+                )}
               </div>
 
               <div className="mb-6">
@@ -2505,7 +2577,13 @@ function TestResults() {
                   className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-teal-500 focus:ring focus:ring-teal-500 focus:ring-opacity-50 text-base py-2.5 resize-none transition-colors"
                   rows="4"
                   placeholder="Enter your conclusion and any important observations..."
+                  required
                 ></textarea>
+                {!formData.conclusion && (
+                  <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                    Please provide a conclusion
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2522,9 +2600,9 @@ function TestResults() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={createLabResult}
-                disabled={!formData.lab_request_id}
+                disabled={!formData.lab_request_id || Object.keys(formData.result_data).length === 0 || !formData.conclusion}
                 className={`px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg transition-colors shadow-md font-medium ${
-                  !formData.lab_request_id
+                  !formData.lab_request_id || Object.keys(formData.result_data).length === 0 || !formData.conclusion
                     ? "opacity-50 cursor-not-allowed from-gray-400 to-gray-500"
                     : "hover:from-teal-600 hover:to-emerald-600 hover:shadow-lg"
                 }`}
@@ -2638,6 +2716,7 @@ function TestResults() {
                             }
                             className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 text-base py-2 transition-colors"
                             placeholder="Enter value"
+                            required
                           />
                         </div>
 
@@ -2712,7 +2791,13 @@ function TestResults() {
                   className="block w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700/50 shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 text-base py-2.5 resize-none transition-colors"
                   rows="4"
                   placeholder="Enter your conclusion and any important observations..."
+                  required
                 ></textarea>
+                {!formData.conclusion && (
+                  <p className="mt-2 text-sm text-rose-600 dark:text-rose-400">
+                    Please provide a conclusion
+                  </p>
+                )}
               </div>
             </div>
 
@@ -2729,7 +2814,12 @@ function TestResults() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => updateLabResult(selectedResult.id)}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md hover:shadow-lg font-medium"
+                disabled={Object.keys(formData.result_data || {}).length === 0 || !formData.conclusion}
+                className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 transition-colors shadow-md hover:shadow-lg font-medium ${
+                  Object.keys(formData.result_data || {}).length === 0 || !formData.conclusion
+                    ? "opacity-50 cursor-not-allowed from-gray-400 to-gray-500"
+                    : ""
+                }`}
               >
                 Save Changes
               </motion.button>
@@ -2816,6 +2906,46 @@ function TestResults() {
                 Delete Result
               </motion.button>
             </div>
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  };
+
+  // Render full image modal
+  const renderFullImageModal = () => {
+    if (!showFullImageModal || !fullImageUrl) return null;
+
+    return (
+      <AnimatePresence>
+        <motion.div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setShowFullImageModal(false)}
+        >
+          <motion.div 
+            className="relative max-w-5xl w-full max-h-[90vh]"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <motion.button
+              whileHover={{ scale: 1.1, backgroundColor: "rgba(255, 255, 255, 0.2)" }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setShowFullImageModal(false)}
+              className="absolute -top-12 right-0 text-white p-2 rounded-full z-10"
+            >
+              <FiX className="h-6 w-6" />
+            </motion.button>
+            <img 
+              src={fullImageUrl} 
+              alt="Full size" 
+              className="max-w-full max-h-[85vh] mx-auto object-contain rounded-lg shadow-2xl" 
+            />
           </motion.div>
         </motion.div>
       </AnimatePresence>
@@ -2952,6 +3082,7 @@ function TestResults() {
         {renderEditModal()}
         {renderDeleteConfirm()}
         {renderImageUploadModal()}
+        {renderFullImageModal()}
         {renderFilterModal()}
       </div>
       
