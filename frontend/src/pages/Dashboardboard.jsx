@@ -1,3 +1,5 @@
+// pages/Dashboardboard.jsx
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
@@ -10,6 +12,7 @@ import { MdOutlineBiotech, MdOutlineHealthAndSafety, MdDashboard, MdOutlineNight
 import { RiMentalHealthLine, RiPulseLine, RiStethoscopeLine, RiHealthBookLine, RiLogoutCircleRLine, RiShieldUserLine } from 'react-icons/ri';
 import { TbReportMedical, TbHeartRateMonitor, TbVirus } from 'react-icons/tb';
 import { LuLogOut } from 'react-icons/lu';
+import Portal from "@/pages/Portal";
 
 // Import all dashboard components
 import DoctorDashboard from './Doctor/DoctorDashboard';
@@ -1516,7 +1519,8 @@ function Dashboard() {
               {/* Profile dropdown portal - positioned fixed to avoid stacking context issues */}
               <AnimatePresence>
                 {showProfileDropdown && (
-                  <div className="fixed inset-0 z-[9999] pointer-events-none">
+                  <Portal>
+                  <div className="fixed inset-0 z-[99999] pointer-events-none">
                     <div className="absolute inset-0 pointer-events-auto" onClick={() => setShowProfileDropdown(false)}></div>
                     <motion.div 
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -1572,6 +1576,7 @@ function Dashboard() {
                       </div>
                     </motion.div>
                   </div>
+                  </Portal>
                 )}
               </AnimatePresence>
             </div>
