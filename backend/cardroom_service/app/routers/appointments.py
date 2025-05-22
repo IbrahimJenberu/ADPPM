@@ -140,6 +140,7 @@ async def list_appointments(
     status: Optional[str] = Query(None, description="Filter by status"),
     from_date: Optional[datetime] = Query(None, description="Filter from date"),
     to_date: Optional[datetime] = Query(None, description="Filter to date"),
+    sort: Optional[str] = Query(None, description="Sort field"),
     conn: Connection = Depends(get_db_connection),
 ):
     """List appointments with pagination and filters."""
@@ -152,18 +153,81 @@ async def list_appointments(
         filters["doctor_id"] = doctor_id
     if status:
         filters["status"] = status
-    if from_date:
-        filters["appointment_date >= "] = from_date
-    if to_date:
-        filters["appointment_date <= "] = to_date
 
-    appointments, total = await AppointmentModel.list(
-        limit=page_size, 
-        offset=offset,
-        **filters
-    )
+    # Create a custom where clause builder for date ranges
+    where_clauses = []
+    filter_values = []
     
-    pages = (total + page_size - 1) // page_size
+    # Start with base filters (not date ranges)
+    for key, value in filters.items():
+        where_clauses.append(f"a.{key} = ${len(filter_values) + 1}")
+        filter_values.append(value)
+    
+    # Add date range filters
+    if from_date:
+        where_clauses.append(f"a.appointment_date >= ${len(filter_values) + 1}")
+        filter_values.append(from_date)
+    if to_date:
+        where_clauses.append(f"a.appointment_date <= ${len(filter_values) + 1}")
+        filter_values.append(to_date)
+    
+    # Always include non-deleted records
+    where_clauses.append("a.is_deleted = FALSE")
+    
+    # Build the where clause
+    where_clause = " AND ".join(where_clauses)
+    
+    # Build the base query for appointments with joins
+    base_query = """
+        SELECT 
+            a.*,
+            d.full_name as doctor_name,
+            d.department as department,
+            CONCAT(p.first_name, ' ', p.last_name) as patient_name,
+            p.registration_number as patient_registration
+        FROM appointments a
+        JOIN doctors d ON a.doctor_id = d.id
+        JOIN patients p ON a.patient_id = p.id
+    """
+    
+    # Add the where clause if there are conditions
+    if where_clauses:
+        base_query += f" WHERE {where_clause}"
+    
+    # Add sorting
+    if sort:
+        if sort.startswith('-'):
+            sort_field = sort[1:]
+            sort_order = "DESC"
+        else:
+            sort_field = sort
+            sort_order = "ASC"
+        base_query += f" ORDER BY a.{sort_field} {sort_order}"
+    else:
+        base_query += " ORDER BY a.appointment_date ASC"
+    
+    # Count query
+    count_query = f"""
+        SELECT COUNT(*)
+        FROM appointments a
+        JOIN doctors d ON a.doctor_id = d.id
+        JOIN patients p ON a.patient_id = p.id
+        {f"WHERE {where_clause}" if where_clauses else ""}
+    """
+    
+    # Fetch data query with pagination
+    data_query = f"""
+        {base_query}
+        LIMIT ${len(filter_values) + 1} OFFSET ${len(filter_values) + 2}
+    """
+    
+    # Execute queries
+    total = await conn.fetchval(count_query, *filter_values)
+    results = await conn.fetch(data_query, *(filter_values + [page_size, offset]))
+    
+    appointments = [dict(r) for r in results]
+    pages = (total + page_size - 1) // page_size if page_size > 0 else 0
+    
     return AppointmentsResponse(
         data=appointments,
         total=total,
