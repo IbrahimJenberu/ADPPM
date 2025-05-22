@@ -103,7 +103,11 @@ class BaseCRUD:
         i = 1
         for key, value in filters.items():
             if value is not None:
-                where_clauses.append(f"{key} = ${i}")
+                # Check if the key contains an operator
+                if any(op in key for op in ['>=', '<=', '>', '<', '!=', ' LIKE ']):
+                    where_clauses.append(f"{key} ${i}")  # Use the operator in the key
+                else:
+                    where_clauses.append(f"{key} = ${i}")  # Default to equality
                 filter_values.append(value)
                 i += 1
         

@@ -20,293 +20,6 @@ import { TbRoute, TbStethoscope, TbHeartRateMonitor, TbUserPlus } from 'react-ic
 import { HiOutlineDocumentReport, HiOutlineChartBar } from 'react-icons/hi';
 import { RiMentalHealthLine, RiHospitalLine, RiTeamLine } from 'react-icons/ri';
 
-// Add premium fonts
-const fontStyle = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-  @import url('https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400&display=swap');
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-
-  :root {
-    /* Medical-optimized color palette - Primary (Trustworthy blue) */
-    --color-primary-50: #eef5ff;
-    --color-primary-100: #d9e7fc;
-    --color-primary-200: #bcd4fa;
-    --color-primary-300: #8db7f7;
-    --color-primary-400: #5693f2;
-    --color-primary-500: #5D5CDE; /* Brand primary */
-    --color-primary-600: #344cda;
-    --color-primary-700: #2f3dbd;
-    --color-primary-800: #29349a;
-    --color-primary-900: #232b77;
-    
-    /* Secondary (Healing teal) */
-    --color-secondary-50: #effcf9;
-    --color-secondary-100: #d7f5f0;
-    --color-secondary-200: #b0ebe3;
-    --color-secondary-300: #7fdcd0;
-    --color-secondary-400: #47c2b6;
-    --color-secondary-500: #30a599;
-    --color-secondary-600: #26857d;
-    --color-secondary-700: #236b66;
-    --color-secondary-800: #215652;
-    --color-secondary-900: #1e4744;
-
-    /* Accent (Vitality purple) */
-    --color-accent-50: #f5f3ff;
-    --color-accent-100: #ede8ff;
-    --color-accent-200: #ddd5ff;
-    --color-accent-300: #c4b5fe;
-    --color-accent-400: #a78bfa;
-    --color-accent-500: #8b5cf6;
-    --color-accent-600: #7c3aed;
-    --color-accent-700: #6d28d9;
-    --color-accent-800: #5b21b6;
-    --color-accent-900: #4c1d95;
-    
-    /* Success (Wellness green) */
-    --color-success-50: #ecfdf5;
-    --color-success-100: #d1fae5;
-    --color-success-200: #a7f3d0;
-    --color-success-300: #6ee7b7;
-    --color-success-400: #34d399;
-    --color-success-500: #10b981;
-    --color-success-600: #059669;
-    --color-success-700: #047857;
-    --color-success-800: #065f46;
-    --color-success-900: #064e3b;
-    
-    /* Warning (Alert amber) */
-    --color-warning-50: #fffbeb;
-    --color-warning-100: #fef3c7;
-    --color-warning-200: #fde68a;
-    --color-warning-300: #fcd34d;
-    --color-warning-400: #fbbf24;
-    --color-warning-500: #f59e0b;
-    --color-warning-600: #d97706;
-    --color-warning-700: #b45309;
-    --color-warning-800: #92400e;
-    --color-warning-900: #78350f;
-    
-    /* Error (Critical red) */
-    --color-error-50: #fef2f2;
-    --color-error-100: #fee2e2;
-    --color-error-200: #fecaca;
-    --color-error-300: #fca5a5;
-    --color-error-400: #f87171;
-    --color-error-500: #ef4444;
-    --color-error-600: #dc2626;
-    --color-error-700: #b91c1c;
-    --color-error-800: #991b1b;
-    --color-error-900: #7f1d1d;
-    
-    /* Info (Clarity blue) */
-    --color-info-50: #eff6ff;
-    --color-info-100: #dbeafe;
-    --color-info-200: #bfdbfe;
-    --color-info-300: #93c5fd;
-    --color-info-400: #60a5fa;
-    --color-info-500: #3b82f6;
-    --color-info-600: #2563eb;
-    --color-info-700: #1d4ed8;
-    --color-info-800: #1e40af;
-    --color-info-900: #1e3a8a;
-
-    /* Neutrals (Clinically clean) */
-    --color-neutral-50: #f9fafb;
-    --color-neutral-100: #f3f4f6;
-    --color-neutral-200: #e5e7eb;
-    --color-neutral-300: #d1d5db;
-    --color-neutral-400: #9ca3af;
-    --color-neutral-500: #6b7280;
-    --color-neutral-600: #4b5563;
-    --color-neutral-700: #374151;
-    --color-neutral-800: #1f2937;
-    --color-neutral-900: #111827;
-    --color-neutral-950: #0a0f1c;
-
-    /* Gold (Premium accent) */
-    --color-gold-50: #fdfbed;
-    --color-gold-100: #fdf5d1;
-    --color-gold-200: #fceaa6;
-    --color-gold-300: #fbd86c;
-    --color-gold-400: #f9c341;
-    --color-gold-500: #f6aa16;
-    --color-gold-600: #e1810f;
-    --color-gold-700: #bc5c12;
-    --color-gold-800: #974715;
-    --color-gold-900: #7c3c16;
-
-    /* Spacing system */
-    --space-2xs: 0.25rem;
-    --space-xs: 0.5rem;
-    --space-sm: 0.75rem;
-    --space-md: 1rem;
-    --space-lg: 1.5rem;
-    --space-xl: 2rem;
-    --space-2xl: 3rem;
-    --space-3xl: 5rem;
-
-    /* Typography */
-    --text-xs: 0.75rem;
-    --text-sm: 0.875rem;
-    --text-base: 1rem;
-    --text-lg: 1.125rem;
-    --text-xl: 1.25rem;
-    --text-2xl: 1.5rem;
-    --text-3xl: 1.875rem;
-    --text-4xl: 2.25rem;
-
-    /* Border Radius */
-    --radius-sm: 0.25rem;
-    --radius-md: 0.375rem;
-    --radius-lg: 0.5rem;
-    --radius-xl: 0.75rem;
-    --radius-2xl: 1rem;
-    --radius-3xl: 1.5rem;
-    --radius-full: 9999px;
-
-    /* Shadows */
-    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-    
-    /* Transitions */
-    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  /* Base styles */
-  html {
-    scroll-behavior: smooth;
-  }
-
-  body {
-    font-family: 'Inter', sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    -webkit-font-smoothing: antialiased;
-    transition: background-color 0.3s ease;
-    letter-spacing: -0.01em;
-  }
-
-  .font-display {
-    font-family: 'Space Grotesk', 'Inter', sans-serif;
-    letter-spacing: -0.03em;
-  }
-  
-  .font-marketing {
-    font-family: 'Satoshi', 'Inter', sans-serif;
-  }
-
-  /* Dark mode styles */
-  .dark {
-    --color-primary-50: #1a1a3a;
-    --color-primary-100: #22224a;
-    --color-primary-200: #2b2b5e;
-    --color-primary-300: #38387e;
-    --color-primary-400: #4b4ba7;
-    --color-primary-500: #5D5CDE;
-    --color-primary-600: #6262cd;
-    --color-primary-700: #9c9ceb;
-    --color-primary-800: #b8b8f1;
-    --color-primary-900: #d7d7f9;
-
-    --color-secondary-50: #042f2e;
-    --color-secondary-100: #064e4c;
-    --color-secondary-200: #0f766e;
-    --color-secondary-300: #0d9488;
-    --color-secondary-400: #14b8a6;
-    --color-secondary-500: #2dd4bf;
-    --color-secondary-600: #5eead4;
-    --color-secondary-700: #99f6e4;
-    --color-secondary-800: #ccfbf1;
-    --color-secondary-900: #f0fdfa;
-
-    --color-accent-50: #4a044e;
-    --color-accent-100: #6b21a8;
-    --color-accent-200: #7e22ce;
-    --color-accent-300: #9333ea;
-    --color-accent-400: #a855f7;
-    --color-accent-500: #c084fc;
-    --color-accent-600: #d8b4fe;
-    --color-accent-700: #e9d5ff;
-    --color-accent-800: #f3e8ff;
-    --color-accent-900: #faf5ff;
-    
-    /* Glass effect background colors */
-    --glass-bg: rgba(30, 41, 59, 0.8);
-    --glass-border: rgba(255, 255, 255, 0.07);
-    --glass-highlight: rgba(255, 255, 255, 0.05);
-  }
-
-  .glass-effect {
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.06);
-  }
-  
-  .dark .glass-effect {
-    background: rgba(15, 23, 42, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.4);
-  }
-
-  /* Animations */
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-  }
-  
-  @keyframes shimmer {
-    100% { transform: translateX(100%); }
-  }
-  
-  @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-5px); }
-    100% { transform: translateY(0px); }
-  }
-  
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: var(--color-neutral-100);
-    border-radius: 8px;
-  }
-  
-  .dark ::-webkit-scrollbar-track {
-    background: var(--color-neutral-800);
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-neutral-300);
-    border-radius: 8px;
-    border: 2px solid var(--color-neutral-100);
-  }
-  
-  .dark ::-webkit-scrollbar-thumb {
-    background: var(--color-neutral-600);
-    border: 2px solid var(--color-neutral-800);
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-neutral-400);
-  }
-  
-  .dark ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-neutral-500);
-  }
-`;
-
 // API base URL - change as needed
 const API_BASE_URL = 'http://localhost:8022';
 
@@ -365,7 +78,7 @@ const showSuccessToast = (message) => {
         <FiCheckCircle className="w-5 h-5" />
       </div>
       <div className="flex-1">
-        <h4 className="font-medium text-neutral-800 dark:text-white">Success</h4>
+        <h4 className="font-medium text-neutral-800 dark:text-white font-satoshi">Success</h4>
         <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-1">{message}</p>
       </div>
       <button 
@@ -390,7 +103,7 @@ const showErrorToast = (message) => {
         <FiAlertTriangle className="w-5 h-5" />
       </div>
       <div className="flex-1">
-        <h4 className="font-medium text-neutral-800 dark:text-white">Error</h4>
+        <h4 className="font-medium text-neutral-800 dark:text-white font-satoshi">Error</h4>
         <p className="text-sm text-neutral-600 dark:text-neutral-300 mt-1">{message}</p>
       </div>
       <button 
@@ -1314,7 +1027,294 @@ function AdminDashboard() {
 
   return (
     <div className="font-['Inter',system-ui,sans-serif] min-h-screen bg-gradient-to-br from-neutral-50 via-neutral-50 to-neutral-100 dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-800 text-neutral-800 dark:text-neutral-200 transition-colors duration-300">
-      <style>{fontStyle}</style>
+      <style>
+        {`
+          /* Import premium fonts */
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+          @import url('https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,301,701,300,501,401,901,400&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+          :root {
+            /* Medical-optimized color palette - Primary (Trustworthy blue) */
+            --color-primary-50: #eef5ff;
+            --color-primary-100: #d9e7fc;
+            --color-primary-200: #bcd4fa;
+            --color-primary-300: #8db7f7;
+            --color-primary-400: #5693f2;
+            --color-primary-500: #5D5CDE; /* Brand primary */
+            --color-primary-600: #344cda;
+            --color-primary-700: #2f3dbd;
+            --color-primary-800: #29349a;
+            --color-primary-900: #232b77;
+            
+            /* Secondary (Healing teal) */
+            --color-secondary-50: #effcf9;
+            --color-secondary-100: #d7f5f0;
+            --color-secondary-200: #b0ebe3;
+            --color-secondary-300: #7fdcd0;
+            --color-secondary-400: #47c2b6;
+            --color-secondary-500: #30a599;
+            --color-secondary-600: #26857d;
+            --color-secondary-700: #236b66;
+            --color-secondary-800: #215652;
+            --color-secondary-900: #1e4744;
+
+            /* Accent (Vitality purple) */
+            --color-accent-50: #f5f3ff;
+            --color-accent-100: #ede8ff;
+            --color-accent-200: #ddd5ff;
+            --color-accent-300: #c4b5fe;
+            --color-accent-400: #a78bfa;
+            --color-accent-500: #8b5cf6;
+            --color-accent-600: #7c3aed;
+            --color-accent-700: #6d28d9;
+            --color-accent-800: #5b21b6;
+            --color-accent-900: #4c1d95;
+            
+            /* Success (Wellness green) */
+            --color-success-50: #ecfdf5;
+            --color-success-100: #d1fae5;
+            --color-success-200: #a7f3d0;
+            --color-success-300: #6ee7b7;
+            --color-success-400: #34d399;
+            --color-success-500: #10b981;
+            --color-success-600: #059669;
+            --color-success-700: #047857;
+            --color-success-800: #065f46;
+            --color-success-900: #064e3b;
+            
+            /* Warning (Alert amber) */
+            --color-warning-50: #fffbeb;
+            --color-warning-100: #fef3c7;
+            --color-warning-200: #fde68a;
+            --color-warning-300: #fcd34d;
+            --color-warning-400: #fbbf24;
+            --color-warning-500: #f59e0b;
+            --color-warning-600: #d97706;
+            --color-warning-700: #b45309;
+            --color-warning-800: #92400e;
+            --color-warning-900: #78350f;
+            
+            /* Error (Critical red) */
+            --color-error-50: #fef2f2;
+            --color-error-100: #fee2e2;
+            --color-error-200: #fecaca;
+            --color-error-300: #fca5a5;
+            --color-error-400: #f87171;
+            --color-error-500: #ef4444;
+            --color-error-600: #dc2626;
+            --color-error-700: #b91c1c;
+            --color-error-800: #991b1b;
+            --color-error-900: #7f1d1d;
+            
+            /* Info (Clarity blue) */
+            --color-info-50: #eff6ff;
+            --color-info-100: #dbeafe;
+            --color-info-200: #bfdbfe;
+            --color-info-300: #93c5fd;
+            --color-info-400: #60a5fa;
+            --color-info-500: #3b82f6;
+            --color-info-600: #2563eb;
+            --color-info-700: #1d4ed8;
+            --color-info-800: #1e40af;
+            --color-info-900: #1e3a8a;
+
+            /* Neutrals (Clinically clean) */
+            --color-neutral-50: #f9fafb;
+            --color-neutral-100: #f3f4f6;
+            --color-neutral-200: #e5e7eb;
+            --color-neutral-300: #d1d5db;
+            --color-neutral-400: #9ca3af;
+            --color-neutral-500: #6b7280;
+            --color-neutral-600: #4b5563;
+            --color-neutral-700: #374151;
+            --color-neutral-800: #1f2937;
+            --color-neutral-900: #111827;
+            --color-neutral-950: #0a0f1c;
+
+            /* Gold (Premium accent) */
+            --color-gold-50: #fdfbed;
+            --color-gold-100: #fdf5d1;
+            --color-gold-200: #fceaa6;
+            --color-gold-300: #fbd86c;
+            --color-gold-400: #f9c341;
+            --color-gold-500: #f6aa16;
+            --color-gold-600: #e1810f;
+            --color-gold-700: #bc5c12;
+            --color-gold-800: #974715;
+            --color-gold-900: #7c3c16;
+
+            /* Spacing system */
+            --space-2xs: 0.25rem;
+            --space-xs: 0.5rem;
+            --space-sm: 0.75rem;
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --space-xl: 2rem;
+            --space-2xl: 3rem;
+            --space-3xl: 5rem;
+
+            /* Typography */
+            --text-xs: 0.75rem;
+            --text-sm: 0.875rem;
+            --text-base: 1rem;
+            --text-lg: 1.125rem;
+            --text-xl: 1.25rem;
+            --text-2xl: 1.5rem;
+            --text-3xl: 1.875rem;
+            --text-4xl: 2.25rem;
+
+            /* Border Radius */
+            --radius-sm: 0.25rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --radius-xl: 0.75rem;
+            --radius-2xl: 1rem;
+            --radius-3xl: 1.5rem;
+            --radius-full: 9999px;
+
+            /* Shadows */
+            --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            
+            /* Transitions */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+
+          /* Base styles */
+          html {
+            scroll-behavior: smooth;
+          }
+
+          body {
+            font-family: 'Inter', sans-serif;
+            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+            -webkit-font-smoothing: antialiased;
+            transition: background-color 0.3s ease;
+            letter-spacing: -0.01em;
+          }
+
+          .font-display {
+            font-family: 'Space Grotesk', 'Inter', sans-serif;
+            letter-spacing: -0.03em;
+          }
+          
+          .font-marketing {
+            font-family: 'Satoshi', 'Inter', sans-serif;
+          }
+
+          /* Dark mode styles */
+          .dark {
+            --color-primary-50: #1a1a3a;
+            --color-primary-100: #22224a;
+            --color-primary-200: #2b2b5e;
+            --color-primary-300: #38387e;
+            --color-primary-400: #4b4ba7;
+            --color-primary-500: #5D5CDE;
+            --color-primary-600: #6262cd;
+            --color-primary-700: #9c9ceb;
+            --color-primary-800: #b8b8f1;
+            --color-primary-900: #d7d7f9;
+
+            --color-secondary-50: #042f2e;
+            --color-secondary-100: #064e4c;
+            --color-secondary-200: #0f766e;
+            --color-secondary-300: #0d9488;
+            --color-secondary-400: #14b8a6;
+            --color-secondary-500: #2dd4bf;
+            --color-secondary-600: #5eead4;
+            --color-secondary-700: #99f6e4;
+            --color-secondary-800: #ccfbf1;
+            --color-secondary-900: #f0fdfa;
+
+            --color-accent-50: #4a044e;
+            --color-accent-100: #6b21a8;
+            --color-accent-200: #7e22ce;
+            --color-accent-300: #9333ea;
+            --color-accent-400: #a855f7;
+            --color-accent-500: #c084fc;
+            --color-accent-600: #d8b4fe;
+            --color-accent-700: #e9d5ff;
+            --color-accent-800: #f3e8ff;
+            --color-accent-900: #faf5ff;
+            
+            /* Glass effect background colors */
+            --glass-bg: rgba(30, 41, 59, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.07);
+            --glass-highlight: rgba(255, 255, 255, 0.05);
+          }
+
+          .glass-effect {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.06);
+          }
+          
+          .dark .glass-effect {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.4);
+          }
+
+          /* Animations */
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+          }
+          
+          @keyframes shimmer {
+            100% { transform: translateX(100%); }
+          }
+          
+          @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+          }
+          
+          /* Scrollbar styling */
+          ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          
+          ::-webkit-scrollbar-track {
+            background: var(--color-neutral-100);
+            border-radius: 8px;
+          }
+          
+          .dark ::-webkit-scrollbar-track {
+            background: var(--color-neutral-800);
+          }
+          
+          ::-webkit-scrollbar-thumb {
+            background: var(--color-neutral-300);
+            border-radius: 8px;
+            border: 2px solid var(--color-neutral-100);
+          }
+          
+          .dark ::-webkit-scrollbar-thumb {
+            background: var(--color-neutral-600);
+            border: 2px solid var(--color-neutral-800);
+          }
+          
+          ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-neutral-400);
+          }
+          
+          .dark ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-neutral-500);
+          }
+        `}
+      </style>
       <Toaster position="top-right" />
 
       
