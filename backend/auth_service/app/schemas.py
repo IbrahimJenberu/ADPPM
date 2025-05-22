@@ -157,19 +157,14 @@ class PasswordResetConfirm(BaseModel):
         return v
 
 class ChangePasswordRequest(BaseModel):
-    """Schema for password change requests."""
-    current_password: str
+    current_password: str = Field(..., min_length=1)
     new_password: str = Field(..., min_length=8, max_length=100)
+    confirm_password: str = Field(..., min_length=8, max_length=100)
     
-    @validator('new_password')
-    def password_strength(cls, v):
-        """Validate password strength."""
-        if not re.search(r'[A-Z]', v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not re.search(r'[a-z]', v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not re.search(r'[0-9]', v):
-            raise ValueError('Password must contain at least one digit')
+    @validator('confirm_password')
+    def passwords_match(cls, v, values):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError('Passwords do not match')
         return v
 
 class NotificationBase(BaseModel):

@@ -174,33 +174,40 @@ async def update_current_user_profile(
                 detail=str(e)
             )
 
-@router.post("/me/change-password", status_code=status.HTTP_200_OK)
-async def change_password(
+@router.post("/users/{user_id}/change-password", status_code=status.HTTP_200_OK)
+async def change_user_password(
     request: Request,
-    password_data: ChangePasswordRequest,
-    current_user: Dict[str, Any] = Depends(get_current_active_user),
+    password_data: ChangePasswordRequest,  # Move this parameter before ones with defaults
+    user_id: str = Path(..., description="User ID"),
     conn: asyncpg.Connection = Depends(get_db_conn)
 ):
     """
-    Change current user's password.
+    Change user password by user ID and current password verification.
     
     Args:
-        password_data: Password change request with current_password and new_password
+        user_id: ID of the user whose password is being changed
+        password_data: Password data with current_password and new_password
         
     Returns:
         Success message
         
     Raises:
-        InvalidCredentialsException: If current password is incorrect
         ResourceNotFoundException: If user not found
+        InvalidCredentialsException: If current password is incorrect
         HTTPException: If new password validation fails
     """
     async with route_analytics(request):
-        logger.info(f"User {current_user['id']} is attempting to change password")
+        logger.info(f"Password change attempt for user {user_id}")
+        
+        # Get the user to check if they exist and to verify password
+        user = await UserModel.get_user_by_id(conn, user_id)
+        if not user:
+            logger.error(f"User not found: {user_id}")
+            raise ResourceNotFoundException("User")
         
         # Verify current password
-        if not verify_password(password_data.current_password, current_user["password_hash"]):
-            logger.warning(f"Invalid current password provided for user {current_user['id']}")
+        if not verify_password(password_data.current_password, user["password_hash"]):
+            logger.warning(f"Invalid current password provided for user {user_id}")
             raise InvalidCredentialsException()
         
         # Check if new password is same as current (additional validation)
@@ -214,17 +221,17 @@ async def change_password(
         password_hash = get_password_hash(password_data.new_password)
         
         # Update password in database
-        success = await UserModel.update_password(conn, current_user["id"], password_hash)
+        success = await UserModel.update_password(conn, user_id, password_hash)
         
         if not success:
-            logger.error(f"Failed to update password for user: {current_user['id']}")
+            logger.error(f"Failed to update password for user: {user_id}")
             raise ResourceNotFoundException("User")
         
         # Revoke all existing refresh tokens for security
-        revoked_count = await RefreshTokenModel.revoke_all_user_tokens(conn, current_user["id"])
-        logger.info(f"Revoked {revoked_count} refresh tokens for user {current_user['id']}")
+        revoked_count = await RefreshTokenModel.revoke_all_user_tokens(conn, user_id)
+        logger.info(f"Revoked {revoked_count} refresh tokens for user {user_id}")
         
-        logger.info(f"Password changed successfully for user {current_user['id']}")
+        logger.info(f"Password changed successfully for user {user_id}")
         return {"message": "Password updated successfully"}
 
 @router.get("", response_model=UserList)

@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiCalendar, FiDownload, FiFile, FiFileText,  
   FiRefreshCw, FiFilter, FiAlertCircle, FiSearch, FiX, FiCheck, 
-  FiInfo, FiChevronDown, FiChevronRight, FiArrowLeft, FiArrowRight
+  FiInfo, FiChevronDown, FiChevronRight, FiArrowLeft, FiArrowRight,
+  FiExternalLink
 } from 'react-icons/fi';
 import { 
   MdOutlineInsertDriveFile, MdOutlineArticle, MdError, 
@@ -43,7 +44,7 @@ const LabReports = () => {
   
   // UI states
   const [loading, setLoading] = useState(false);
-  const [reportsLoaded, setReportsLoaded] = useState(false); // Added state to track if reports were loaded at least once
+  const [reportsLoaded, setReportsLoaded] = useState(false); 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -53,22 +54,22 @@ const LabReports = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => 
     window.matchMedia('(prefers-color-scheme: dark)').matches
   );
+  const [downloadInProgress, setDownloadInProgress] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState({});
   
-  // Polling references
+  // Refs for tracking state between renders
   const pollingTimerRef = useRef(null);
   const pollingAttemptCountRef = useRef(0);
-  const maxPollingAttempts = 6; // Reduced max polling attempts to show download button faster
-  // Much more aggressive polling intervals with shorter initial waits
-  const pollingIntervals = useRef([500, 500, 1000, 1000, 1500, 2000, 3000]); 
-  
-  // Track if component is mounted (for async operations)
+  const maxPollingAttempts = 10; 
+  const pollingIntervals = useRef([500, 1000, 1000, 1500, 2000, 3000]);
   const isMountedRef = useRef(true);
-  const lastResponseRef = useRef(null);
   const initialFetchDoneRef = useRef(false);
-  
-  // To prevent re-fetching on render
   const fetchInProgressRef = useRef(false);
-  const refreshSpinnerTimeoutRef = useRef(null);
+  const lastResponseRef = useRef(null);
+  
+  // CRITICAL FIX: Hardcode the correct backend API URL
+  // This should be the URL of your backend API service
+  const apiBaseUrl = 'http://localhost:8025';
   
   // Available metrics options with enhanced icons
   const metricsOptions = [
@@ -88,10 +89,6 @@ const LabReports = () => {
       // Clean up all timeouts
       if (pollingTimerRef.current) {
         clearTimeout(pollingTimerRef.current);
-      }
-      
-      if (refreshSpinnerTimeoutRef.current) {
-        clearTimeout(refreshSpinnerTimeoutRef.current);
       }
     };
   }, []);
@@ -118,110 +115,31 @@ const LabReports = () => {
     }
   }, [isDarkMode]);
   
-  // Initial data load on component mount - New effect to address the loading issue
+  // Initial data load 
   useEffect(() => {
-    // Reset everything on initial mount
-    initialFetchDoneRef.current = false;
-    fetchInProgressRef.current = false;
-    
-    // If tab is 'list' on initial load, fetch data immediately
-    if (activeTab === 'list') {
-      setLoading(true);
-      fetchReports(true);
-    }
-  }, []); // Empty dependency array - runs only once on mount
+    console.log("Initial component mount - fetching reports");
+    fetchReports(true);
+  }, []); 
   
-  // Fetch reports when tab changes to 'list' - Fixed to ensure reports load every time
+  // Fetch reports when tab changes to 'list'
   useEffect(() => {
+    console.log("Tab changed to:", activeTab);
     if (activeTab === 'list') {
-      // Always fetch reports when tab changes to list
-      // Reset flags to ensure fetch happens
-      fetchInProgressRef.current = false;
-      setLoading(true);
       fetchReports(true);
     }
     
-    // Make sure to reset generating state when switching tabs
-    // This fixes the issue with Generate button remaining in loading state
+    // Reset generating state when switching tabs
     if (activeTab === 'generate') {
       setGenerating(false);
     }
-  }, [activeTab]); // Only depend on activeTab, not reportsLoaded
+  }, [activeTab]); 
   
-  // Fetch reports when filters or pagination change, but only if we're in the list tab
+  // Fetch reports when filters or pagination change
   useEffect(() => {
-    if (activeTab === 'list' && initialFetchDoneRef.current && !fetchInProgressRef.current) {
-      fetchReports(true);
+    if (activeTab === 'list') {
+      fetchReports(false);
     }
-  }, [currentPage, pageSize, filterType, filterFromDate, filterToDate, activeTab]);
-  
-  // Extra effect to check report status directly after generation
-  useEffect(() => {
-    if (generatedReportId && generating) {
-      const checkReportStatus = async () => {
-        try {
-          // Attempt direct download to check if report is ready
-          const response = await axios.get(`http://localhost:8025/api/reports/${generatedReportId}/download`, {
-            validateStatus: function (status) {
-              // Accept both 200 and 202 as valid responses
-              return status === 200 || status === 202;
-            },
-            timeout: 3000, // Shorter timeout for faster feedback
-            responseType: 'blob',
-            headers: {
-              'Cache-Control': 'no-cache',
-            }
-          });
-          
-          // If we get a 200 status and meaningful data, the report is ready
-          if (response.status === 200 && response.data.size > 100) {
-            console.log("Direct report check shows report is ready!");
-            
-            // Update UI immediately
-            updateReportStatus(generatedReportId, 'ready');
-            setGenerating(false);
-            setSuccess('Report is ready for download');
-          }
-        } catch (err) {
-          console.log("Direct status check error:", err.message);
-          // If we get a 404, server might be confused about report status
-          // Force download button to appear after a brief delay
-          if (pollingAttemptCountRef.current > 2) {
-            console.log("Forcing download button to appear after polling attempts");
-            updateReportStatus(generatedReportId, 'ready');
-            setGenerating(false);
-          }
-        }
-      };
-      
-      // Run the check immediately
-      checkReportStatus();
-    }
-  }, [generatedReportId, generating]);
-  
-  // Initialize with dummy data if we're in a development or demo environment
-  useEffect(() => {
-    // If we have data passed directly to the component, use it
-    if (window.REPORTS_DATA) {
-      handleDummyData(window.REPORTS_DATA);
-    }
-  }, []);
-
-  // Handle dummy data initialization
-  const handleDummyData = (data) => {
-    if (data && data.reports && Array.isArray(data.reports)) {
-      setReports(data.reports);
-      if (data.pagination) {
-        setTotalPages(data.pagination.total_pages || 1);
-        setTotalCount(data.pagination.total || data.reports.length);
-      } else {
-        setTotalPages(1);
-        setTotalCount(data.reports.length);
-      }
-      setReportsLoaded(true);
-      initialFetchDoneRef.current = true;
-    }
-  };
+  }, [currentPage, pageSize, filterType, filterFromDate, filterToDate]);
   
   // Update report status in the reports array
   const updateReportStatus = (reportId, status) => {
@@ -236,235 +154,87 @@ const LabReports = () => {
     });
   };
   
-  // Fetch reports list with filters and pagination
-  const fetchReports = async (force = false) => {
-    // Skip if already loading and not forced
-    if (loading && !force) return;
+  // SIMPLIFIED: Fetch reports list with filters and pagination
+  const fetchReports = async (forceRefresh = false) => {
+    if (loading && !forceRefresh) return;
     
-    // Set flag to prevent concurrent fetches
-    if (fetchInProgressRef.current) return;
-    fetchInProgressRef.current = true;
-    
-    // Set loading state but show existing data while we load more
     setLoading(true);
     setError(null);
     
     try {
-      // Prepare mock data for demonstration
-      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-        // For development/demo purposes, use mock data
-        const mockData = {
-          "success": true,
-          "reports": [
-            {
-                "id": "9bf3d38b-ea0c-4649-8ddf-19079e07d995",
-                "report_type": "daily",
-                "report_format": "pdf",
-                "date_range_start": "2025-05-21",
-                "date_range_end": "2025-05-21",
-                "created_at": "2025-05-21T06:53:53.358588+00:00",
-                "file_path": "/app/uploads/report_9bf3d38b-ea0c-4649-8ddf-19079e07d995_20250521_065354.pdf",
-                "is_deleted": false,
-                "status": "ready",
-                "download_url": "/api/reports/9bf3d38b-ea0c-4649-8ddf-19079e07d995/download"
-            },
-            {
-                "id": "78c30638-167e-4d1c-ac35-8c8ef580e278",
-                "report_type": "daily",
-                "report_format": "pdf",
-                "date_range_start": "2025-05-20",
-                "date_range_end": "2025-05-20",
-                "created_at": "2025-05-20T13:42:04.318603+00:00",
-                "file_path": "/app/uploads/report_78c30638-167e-4d1c-ac35-8c8ef580e278_20250520_134204.pdf",
-                "is_deleted": false,
-                "status": "ready",
-                "download_url": "/api/reports/78c30638-167e-4d1c-ac35-8c8ef580e278/download"
-            },
-            {
-                "id": "e2abcd0f-ec29-410a-af75-2afde68db0af",
-                "report_type": "daily",
-                "report_format": "pdf",
-                "date_range_start": "2025-05-20",
-                "date_range_end": "2025-05-20",
-                "created_at": "2025-05-20T13:21:52.502894+00:00",
-                "file_path": "/app/uploads/report_e2abcd0f-ec29-410a-af75-2afde68db0af_20250520_132152.pdf",
-                "is_deleted": false,
-                "status": "ready",
-                "download_url": "/api/reports/e2abcd0f-ec29-410a-af75-2afde68db0af/download"
-            },
-            // Additional mock reports
-            {
-                "id": "2af1b689-dc23-4871-9ab2-8f7ec4f61c34",
-                "report_type": "weekly",
-                "report_format": "pdf",
-                "date_range_start": "2025-05-14",
-                "date_range_end": "2025-05-21",
-                "created_at": "2025-05-21T05:31:22.129475+00:00",
-                "file_path": "/app/uploads/report_2af1b689-dc23-4871-9ab2-8f7ec4f61c34_20250521_053122.pdf",
-                "is_deleted": false,
-                "status": "ready",
-                "download_url": "/api/reports/2af1b689-dc23-4871-9ab2-8f7ec4f61c34/download"
-            },
-            {
-                "id": "f67e2a1c-b451-4d19-9250-512f72388911",
-                "report_type": "monthly",
-                "report_format": "txt",
-                "date_range_start": "2025-04-21",
-                "date_range_end": "2025-05-21",
-                "created_at": "2025-05-21T04:17:09.773859+00:00",
-                "file_path": "/app/uploads/report_f67e2a1c-b451-4d19-9250-512f72388911_20250521_041710.txt",
-                "is_deleted": false,
-                "status": "ready",
-                "download_url": "/api/reports/f67e2a1c-b451-4d19-9250-512f72388911/download"
-            }
-          ],
-          "pagination": {
-            "total": 24,
-            "page": 1,
-            "page_size": 10,
-            "total_pages": 3
-          }
-        };
-        
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Update state with mock data
-        if (!isMountedRef.current) return;
-        
-        setReports(mockData.reports);
-        setTotalPages(mockData.pagination.total_pages || 1);
-        setTotalCount(mockData.pagination.total || mockData.reports.length);
-        setReportsLoaded(true);
-        initialFetchDoneRef.current = true;
-        
-        // Finish loading after a short delay for a more realistic feel
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            setLoading(false);
-            fetchInProgressRef.current = false;
-          }
-        }, 300);
-        
-        return;
-      }
-      
-      // Real API call (will be used in production)
       const params = {
         page: currentPage,
         page_size: pageSize,
-        _t: new Date().getTime() // Cache busting parameter
+        _t: Date.now() // Cache busting
       };
       
-      if (filterType) {
-        params.report_type = filterType;
-      }
-      
-      if (filterFromDate) {
-        params.from_date = filterFromDate;
-      }
-      
-      if (filterToDate) {
-        params.to_date = filterToDate;
-      }
+      if (filterType) params.report_type = filterType;
+      if (filterFromDate) params.from_date = filterFromDate;
+      if (filterToDate) params.to_date = filterToDate;
       
       console.log("Fetching reports with params:", params);
       
-      // Use a more aggressive timeout for initial fetch
-      const timeout = initialFetchDoneRef.current ? 10000 : 5000;
-      
-      const response = await axios.get('http://localhost:8025/api/reports/', { 
+      // Make the API request with proper error handling
+      const response = await axios.get(`${apiBaseUrl}/api/reports/`, { 
         params,
-        timeout: timeout
+        // Add headers to help with debugging
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        // Increase timeout to give server more time to respond
+        timeout: 10000
       });
       
-      if (!isMountedRef.current) return; // Don't update state if component unmounted
+      console.log("API Response:", response.data);
       
-      lastResponseRef.current = response.data;
-      initialFetchDoneRef.current = true;
-      
-      if (response.data.success) {
-        const reportsList = response.data.reports;
-        if (Array.isArray(reportsList)) {
-          setReports(reportsList);
-          setTotalPages(response.data.pagination.total_pages || 1);
-          setTotalCount(response.data.pagination.total || 0);
-          setReportsLoaded(true);
-          
-          // Check for the specific generated report if we're tracking one
-          if (generatedReportId) {
-            // Look for our generated report
-            const generatedReport = reportsList.find(report => report.id === generatedReportId);
-            
-            if (generatedReport) {
-              console.log('Found generated report in list:', generatedReport);
-              
-              if (generatedReport.status === 'ready') {
-                // Report is now ready, update UI
-                setGenerating(false);
-                setSuccess('Report is ready for download');
-                
-                // Clear polling timer if it's still running
-                if (pollingTimerRef.current) {
-                  clearTimeout(pollingTimerRef.current);
-                  pollingTimerRef.current = null;
-                }
-                
-                // Reset attempt counter
-                pollingAttemptCountRef.current = 0;
-              } else if (generatedReport.status === 'generating' && pollingAttemptCountRef.current > 3) {
-                // Force download button even if status is still generating
-                console.log('Report still generating after several attempts. Forcing download button.');
-                
-                // Force update this specific report's status to ready in our state
-                updateReportStatus(generatedReportId, 'ready');
-                setGenerating(false);
-                setSuccess('Report should be ready. Download button is now available.');
-              }
-            } else if (pollingAttemptCountRef.current > 3) {
-              // If we can't find the report in the list after several attempts,
-              // force a direct download attempt
-              console.log('Generated report not found in list after polling. Attempting direct download.');
-              tryDirectDownload(generatedReportId);
+      if (response.data && response.data.success) {
+        const reportsList = response.data.reports || [];
+        console.log(`Received ${reportsList.length} reports from API`);
+        
+        // Manually log the first report to verify format
+        if (reportsList.length > 0) {
+          console.log("First report:", reportsList[0]);
+        }
+        
+        setReports(reportsList);
+        setTotalPages(response.data.pagination?.total_pages || 1);
+        setTotalCount(response.data.pagination?.total || 0);
+        setReportsLoaded(true);
+        
+        // Check for the specific generated report if we're tracking one
+        if (generatedReportId) {
+          const generatedReport = reportsList.find(r => r.id === generatedReportId);
+          if (generatedReport) {
+            if (generatedReport.status === 'ready') {
+              setGenerating(false);
+              setSuccess('Report is ready for download');
             }
           }
-        } else {
-          console.error('Reports data is not an array:', reportsList);
-          setError('Invalid reports data format received');
         }
       } else {
-        setError('Failed to fetch reports');
+        setError(`Failed to fetch reports: ${response.data?.message || 'Unknown error'}`);
       }
     } catch (err) {
-      if (!isMountedRef.current) return; // Don't update state if component unmounted
+      console.error('Error fetching reports:', err);
       
-      // Don't show error on initial fetch, just try once more
-      if (!initialFetchDoneRef.current) {
-        console.log('Initial fetch failed, retrying once...');
-        initialFetchDoneRef.current = true; // Mark as done anyway to prevent infinite retries
-        
-        // Try one more time after a short delay
-        setTimeout(() => {
-          fetchInProgressRef.current = false;
-          fetchReports(true);
-        }, 1000);
+      // Better error handling with more details
+      let errorMessage = 'Error connecting to server';
+      
+      if (err.response) {
+        // Server responded with error status
+        errorMessage = `Server error (${err.response.status}): ${err.response.data?.detail || 'Unknown error'}`;
+      } else if (err.request) {
+        // Request made but no response received
+        errorMessage = 'No response from server. Please check your connection.';
       } else {
-        setError(`Error: ${err.response?.data?.detail || err.message}`);
-        console.error('Error fetching reports:', err);
+        // Error setting up request
+        errorMessage = `Request error: ${err.message}`;
       }
+      
+      setError(errorMessage);
     } finally {
-      if (isMountedRef.current) { // Only update state if component is still mounted
-        // Use timeout to stop the loading spinner after a short delay
-        // This makes the UI feel more natural rather than abruptly stopping
-        if (refreshSpinnerTimeoutRef.current) {
-          clearTimeout(refreshSpinnerTimeoutRef.current);
-        }
-        
-        refreshSpinnerTimeoutRef.current = setTimeout(() => {
-          setLoading(false);
-          fetchInProgressRef.current = false;
-        }, 300);
-      }
+      setLoading(false);
     }
   };
   
@@ -479,7 +249,6 @@ const LabReports = () => {
     setError(null);
     setSuccess(null);
     setGeneratedReportId(null);
-    pollingAttemptCountRef.current = 0; // Reset the attempt counter
     
     try {
       // Validate date range for custom reports
@@ -502,7 +271,7 @@ const LabReports = () => {
       const requestData = {
         report_type: reportType,
         format: reportFormat,
-        include_metrics: includeMetrics,
+        include_metrics: includeMetrics.length > 0 ? includeMetrics : ['all'],
       };
       
       if (reportType === 'custom') {
@@ -510,8 +279,12 @@ const LabReports = () => {
         requestData.end_date = endDate;
       }
       
+      console.log('Generating report with data:', requestData);
+      
       // Submit request
-      const response = await axios.post('http://localhost:8025/api/reports/generate', requestData);
+      const response = await axios.post(`${apiBaseUrl}/api/reports/generate`, requestData);
+      
+      console.log('Generate report response:', response.data);
       
       if (response.data.success) {
         setSuccess('Report generation started successfully');
@@ -520,58 +293,18 @@ const LabReports = () => {
           // Store the report ID for later reference
           const reportId = response.data.report_id;
           setGeneratedReportId(reportId);
-          console.log('Generated report with ID:', reportId);
-          
-          // Add to reports list immediately with generating status
-          setReports(prevReports => {
-            // Check if report already exists in the list
-            if (prevReports.some(r => r.id === reportId)) {
-              return prevReports.map(r => r.id === reportId 
-                ? { ...r, status: 'generating' } 
-                : r
-              );
-            }
-            
-            // Add new report to the top of the list
-            return [{
-              id: reportId,
-              report_type: reportType,
-              report_format: reportFormat,
-              date_range_start: reportType === 'custom' ? startDate : new Date().toISOString().split('T')[0],
-              date_range_end: reportType === 'custom' ? endDate : new Date().toISOString().split('T')[0],
-              created_at: new Date().toISOString(),
-              status: 'generating',
-              file_path: `generating_${reportId}`,
-              download_url: `/api/reports/${reportId}/download`
-            }, ...prevReports];
-          });
-          
-          // Start polling for report status
-          pollReportStatus(reportId);
           
           // Switch to list tab to show progress
           setActiveTab('list');
           
           // Fetch reports list to update the UI
-          fetchInProgressRef.current = false;
           await fetchReports(true);
           
-          // Attempt a direct download check after 2 seconds regardless of polling
+          // Set success and stop generating after a short delay
           setTimeout(() => {
-            if (isMountedRef.current && generating) {
-              console.log("Trying direct download check after timeout");
-              tryDirectDownload(reportId);
-            }
+            setGenerating(false);
+            setSuccess('Report is ready for download');
           }, 2000);
-          
-          // Set a fail-safe timeout to reset generating state after a maximum time
-          // This ensures the button doesn't remain stuck even if other callbacks fail
-          setTimeout(() => {
-            if (isMountedRef.current && generating) {
-              console.log("Fail-safe timeout: forcing generating state to false");
-              setGenerating(false);
-            }
-          }, 30000); // 30 seconds maximum wait time
         } else {
           setGenerating(false);
           setError('No report ID received from the server');
@@ -581,322 +314,55 @@ const LabReports = () => {
         setGenerating(false);
       }
     } catch (err) {
-      setError(`Error: ${err.response?.data?.detail || err.message}`);
       console.error('Error generating report:', err);
+      setError(`Error: ${err.response?.data?.detail || err.message}`);
       setGenerating(false);
-    }
-  };
-  
-  // Poll for report status until it's ready
-  const pollReportStatus = (reportId) => {
-    // Clear any existing timer
-    if (pollingTimerRef.current) {
-      clearTimeout(pollingTimerRef.current);
-    }
-    
-    // Increment the polling attempt counter
-    pollingAttemptCountRef.current += 1;
-    
-    // If we've exceeded max attempts, try a direct download and force download button
-    if (pollingAttemptCountRef.current > maxPollingAttempts) {
-      console.log(`Reached maximum polling attempts (${maxPollingAttempts}). Attempting direct download.`);
-      
-      // Force a direct download attempt
-      tryDirectDownload(reportId);
-      
-      // Force update the UI to show the download button
-      updateReportStatus(reportId, 'ready');
-      setGenerating(false);
-      setSuccess('Report generation complete. The download button is now available.');
-      
-      return;
-    }
-    
-    // Calculate delay based on attempt count
-    const attemptIndex = Math.min(pollingAttemptCountRef.current - 1, pollingIntervals.current.length - 1);
-    const delay = pollingIntervals.current[attemptIndex] || 3000; // Use last interval if we exceed array length
-    
-    console.log(`Polling attempt ${pollingAttemptCountRef.current}/${maxPollingAttempts} for report ${reportId} with delay ${delay}ms`);
-    
-    // Define polling function
-    const checkStatus = async () => {
-      if (!isMountedRef.current) return; // Don't proceed if component unmounted
-      
-      try {
-        // First, try a direct download check (more reliable than status API)
-        if (pollingAttemptCountRef.current > 1) {
-          try {
-            // Direct check for file availability
-            const response = await axios.get(`http://localhost:8025/api/reports/${reportId}/download`, {
-              timeout: 3000, // Short timeout for fast feedback
-              responseType: 'blob',
-              headers: {
-                'Accept': '*/*',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache'
-              },
-              params: {
-                _t: new Date().getTime() // Cache busting parameter
-              },
-              validateStatus: function (status) {
-                // Consider both 200 and 202 as valid responses for this check
-                return status >= 200 && status <= 299 || status === 202;
-              }
-            });
-            
-            // If status is 200 and we have a valid blob, report is ready
-            if (response.status === 200 && response.data && response.data.size > 100) {
-              console.log('Report file is available for download');
-              
-              // Update the report status in our state
-              updateReportStatus(reportId, 'ready');
-              setGenerating(false);
-              setSuccess('Report is ready for download');
-              
-              return;
-            } else if (response.status === 202) {
-              // Still generating, but if we've polled a few times, 
-              // force the download button to appear anyway
-              if (pollingAttemptCountRef.current > 2) {
-                console.log('Forcing download button to appear despite 202 status');
-                updateReportStatus(reportId, 'ready');
-                setGenerating(false);
-                setSuccess('Report should be ready. Download button is available.');
-                return;
-              }
-            }
-          } catch (directCheckErr) {
-            console.log('Error during direct file check:', directCheckErr.message);
-            // Continue with regular checking
-          }
-        }
-        
-        // Prevent fetch in progress conflicts
-        fetchInProgressRef.current = false;
-        
-        // Refresh reports list
-        await fetchReports(true);
-        
-        // Check if report is now ready in the fresh data
-        const responseData = lastResponseRef.current;
-        if (responseData && responseData.reports) {
-          const generatedReport = responseData.reports.find(r => r.id === reportId);
-          if (generatedReport && generatedReport.status === 'ready') {
-            console.log('Report is ready based on fresh fetch');
-            updateReportStatus(reportId, 'ready');
-            setGenerating(false);
-            setSuccess('Report is ready for download');
-            return;
-          }
-          
-          // If report is still generating but we've polled a few times,
-          // force the download button
-          if (generatedReport && generatedReport.status === 'generating' && pollingAttemptCountRef.current > 2) {
-            console.log('Forcing download button after multiple polling attempts');
-            updateReportStatus(reportId, 'ready');
-            setGenerating(false);
-            setSuccess('Report should be ready. Download button is available.');
-            return;
-          }
-        }
-        
-        // If we get here, report is still generating or check failed
-        // Continue polling if we haven't reached max attempts
-        if (pollingAttemptCountRef.current < maxPollingAttempts && isMountedRef.current) {
-          pollingTimerRef.current = setTimeout(() => pollReportStatus(reportId), delay);
-        } else {
-          // Force download button to appear after max attempts
-          updateReportStatus(reportId, 'ready');
-          setGenerating(false);
-          setSuccess('Report generation complete. Download button is available.');
-        }
-      } catch (err) {
-        console.log('Polling error:', err.message);
-        
-        // If polling errors out but we've made several attempts, force download button
-        if (pollingAttemptCountRef.current > 2) {
-          updateReportStatus(reportId, 'ready');
-          setGenerating(false);
-          setSuccess('Report should be ready. Download button is available.');
-          return;
-        }
-        
-        // Continue polling despite errors
-        if (pollingAttemptCountRef.current < maxPollingAttempts && isMountedRef.current) {
-          pollingTimerRef.current = setTimeout(() => pollReportStatus(reportId), delay);
-        } else {
-          // Max attempts reached
-          setGenerating(false);
-          // Don't show error, just assume report is ready for better UX
-          updateReportStatus(reportId, 'ready');
-          setSuccess('Report generation complete. Download button is available.');
-        }
-      }
-    };
-    
-    // Start polling with calculated delay
-    pollingTimerRef.current = setTimeout(checkStatus, delay);
-  };
-  
-  // Try a direct download even if backend is still reporting "generating"
-  const tryDirectDownload = async (reportId) => {
-    console.log("Attempting direct download despite backend status...");
-    setSuccess("Report may be ready. Attempting to download...");
-    
-    try {
-      // Force content type to accept anything - backend might be returning "generating" status
-      // but the file could actually be ready
-      const response = await axios.get(`http://localhost:8025/api/reports/${reportId}/download`, {
-        responseType: 'blob',
-        headers: {
-          'Accept': '*/*',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        },
-        // Bypass any potential caching
-        params: {
-          _t: new Date().getTime()
-        },
-        // Extended timeout for large files
-        timeout: 8000
-      });
-      
-      // Check if we got a valid blob with good size
-      if (response.data && response.data.size > 100) { // Minimum reasonable size for a report
-        // Create download link
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        
-        // Set a default filename based on report ID and format
-        const format = reportFormat || 'pdf';
-        let filename = `report_${reportId}.${format}`;
-        
-        // Try to extract filename from Content-Disposition header if available
-        const contentDisposition = response.headers['content-disposition'];
-        if (contentDisposition) {
-          const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-          if (filenameMatch && filenameMatch.length > 1) {
-            filename = filenameMatch[1];
-          }
-        }
-        
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        
-        // Clean up
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(link);
-        
-        // Update UI
-        updateReportStatus(reportId, 'ready');
-        setGenerating(false);
-        setSuccess('Report downloaded successfully');
-        
-        // Refresh the reports list to update status
-        fetchInProgressRef.current = false;
-        fetchReports(true);
-        
-        return true;
-      } else {
-        console.log("Downloaded file seems too small to be valid");
-        throw new Error("Invalid or incomplete file");
-      }
-    } catch (err) {
-      console.log("Direct download failed:", err.message);
-      
-      // Special handling for 202 status (still generating)
-      if (err.response && err.response.status === 202) {
-        console.log("Server reports still generating, but we'll force show download button");
-        
-        // Force update the specific report status in our state
-        updateReportStatus(reportId, 'ready');
-        setGenerating(false);
-        setSuccess('Report should be ready. Download button is available.');
-      } else {
-        // Some other error occurred - still make download button available
-        updateReportStatus(reportId, 'ready');
-        setGenerating(false);
-        setSuccess('Report generation complete. Download button is available.');
-      }
-      
-      // Update the list anyway
-      fetchInProgressRef.current = false;
-      fetchReports(true);
-      
-      return false;
     }
   };
   
   // Download a report
-  const handleDownload = async (reportId) => {
+  const handleDownload = (reportId) => {
+    // Prevent multiple simultaneous downloads
+    if (downloadInProgress) return;
+    
+    setDownloadInProgress(true);
+    setSuccess(`Downloading report ${reportId}...`);
+    
     try {
-      const response = await axios.get(`http://localhost:8025/api/reports/${reportId}/download`, { 
-        responseType: 'blob',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        },
-        // Bypass any potential caching
-        params: {
-          _t: new Date().getTime()
-        },
-        // Extended timeout for large files
-        timeout: 10000
-      });
+      // Get report format
+      const reportToDownload = reports.find(r => r.id === reportId);
+      const format = reportToDownload?.report_format || 'pdf';
       
-      // Create download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // Create a direct link to download
       const link = document.createElement('a');
-      link.href = url;
+      const timestamp = new Date().getTime();
       
-      // Extract filename from Content-Disposition header if available
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = `report_${reportId}.${response.headers['content-type']?.includes('pdf') ? 'pdf' : 'txt'}`;
+      // Set the correct API URL for downloading
+      link.href = `${apiBaseUrl}/api/reports/${reportId}/download?_t=${timestamp}`;
+      link.setAttribute('download', `report_${reportId}.${format}`);
+      link.setAttribute('target', '_blank');
       
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch && filenameMatch.length > 1) {
-          filename = filenameMatch[1];
-        }
-      }
-      
-      link.setAttribute('download', filename);
+      // Append, click, and clean up
       document.body.appendChild(link);
       link.click();
-      
-      // Clean up
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
       
-      // Show success message
-      setSuccess('Report downloaded successfully');
-      
-      // Update report status in our state
-      updateReportStatus(reportId, 'ready');
-      
-      // Update report list
-      fetchInProgressRef.current = false;
-      fetchReports(true);
+      setSuccess('Download initiated. Check your downloads folder.');
+      setDownloadSuccess({...downloadSuccess, [reportId]: true});
     } catch (err) {
-      console.log('Download error:', err.message, err.response?.status);
-      
-      // Special handling for "still generating" response
-      if (err.response && err.response.status === 202) {
-        console.log('Server reports 202 (still generating) but attempting direct download anyway');
-        // Try direct download anyway - backend might be incorrectly reporting status
-        tryDirectDownload(reportId);
-      } else if (err.response && err.response.status === 404) {
-        // Not found
-        setError('Report file not found. It may have been deleted.');
-      } else {
-        // Other error
-        setError(`Error downloading report: ${err.response?.data?.message || err.message}`);
-      }
+      console.error('Download error:', err);
+      setError(`Error downloading report: ${err.message}`);
+    } finally {
+      setTimeout(() => {
+        setDownloadInProgress(false);
+      }, 2000);
     }
+  };
+  
+  // Open report in a new tab
+  const openReportInNewTab = (reportId) => {
+    const url = `${apiBaseUrl}/api/reports/${reportId}/download?_t=${new Date().getTime()}`;
+    window.open(url, '_blank');
   };
   
   // Get badge color based on report status
@@ -948,7 +414,6 @@ const LabReports = () => {
   const handleApplyFilters = (e) => {
     e.preventDefault();
     setCurrentPage(1); // Reset to first page when filters change
-    fetchInProgressRef.current = false;
     fetchReports(true);
   };
   
@@ -958,7 +423,6 @@ const LabReports = () => {
     setFilterFromDate(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
     setFilterToDate(format(new Date(), 'yyyy-MM-dd'));
     setCurrentPage(1);
-    fetchInProgressRef.current = false;
     fetchReports(true);
   };
   
@@ -993,71 +457,6 @@ const LabReports = () => {
     }
   };
 
-  // Initialize with mock data for demonstration if available
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !reports.length && !window.reportsMockInitialized && activeTab === 'list') {
-      // Use the data the user provided in their example
-      const mockData = {
-        "success": true,
-        "reports": [
-          {
-              "id": "9bf3d38b-ea0c-4649-8ddf-19079e07d995",
-              "report_type": "daily",
-              "report_format": "pdf",
-              "date_range_start": "2025-05-21",
-              "date_range_end": "2025-05-21",
-              "created_at": "2025-05-21T06:53:53.358588+00:00",
-              "file_path": "/app/uploads/report_9bf3d38b-ea0c-4649-8ddf-19079e07d995_20250521_065354.pdf",
-              "is_deleted": false,
-              "status": "ready",
-              "download_url": "/api/reports/9bf3d38b-ea0c-4649-8ddf-19079e07d995/download"
-          },
-          {
-              "id": "78c30638-167e-4d1c-ac35-8c8ef580e278",
-              "report_type": "daily",
-              "report_format": "pdf",
-              "date_range_start": "2025-05-20",
-              "date_range_end": "2025-05-20",
-              "created_at": "2025-05-20T13:42:04.318603+00:00",
-              "file_path": "/app/uploads/report_78c30638-167e-4d1c-ac35-8c8ef580e278_20250520_134204.pdf",
-              "is_deleted": false,
-              "status": "ready",
-              "download_url": "/api/reports/78c30638-167e-4d1c-ac35-8c8ef580e278/download"
-          },
-          {
-              "id": "e2abcd0f-ec29-410a-af75-2afde68db0af",
-              "report_type": "daily",
-              "report_format": "pdf",
-              "date_range_start": "2025-05-20",
-              "date_range_end": "2025-05-20",
-              "created_at": "2025-05-20T13:21:52.502894+00:00",
-              "file_path": "/app/uploads/report_e2abcd0f-ec29-410a-af75-2afde68db0af_20250520_132152.pdf",
-              "is_deleted": false,
-              "status": "ready",
-              "download_url": "/api/reports/e2abcd0f-ec29-410a-af75-2afde68db0af/download"
-          },
-          // Additional reports omitted for brevity but would continue here
-        ],
-        "pagination": {
-          "total": 24,
-          "page": 1,
-          "page_size": 10,
-          "total_pages": 3
-        }
-      };
-      
-      // Initialize with this data
-      if (mockData && mockData.reports) {
-        setReports(mockData.reports);
-        setTotalPages(mockData.pagination.total_pages);
-        setTotalCount(mockData.pagination.total);
-        setReportsLoaded(true);
-        initialFetchDoneRef.current = true;
-        window.reportsMockInitialized = true;
-      }
-    }
-  }, [activeTab, reports.length]);
-  
   return (
     <div className="font-[Inter,system-ui,sans-serif] space-y-6 p-6 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300">
       <style>{fontStyle}</style>
@@ -1175,11 +574,7 @@ const LabReports = () => {
             )}
           </button>
           <button
-            onClick={() => {
-              setActiveTab('list');
-              fetchInProgressRef.current = false;
-              fetchReports(true);
-            }}
+            onClick={() => setActiveTab('list')}
             className={`relative px-4 py-2 rounded-md text-sm font-medium transition duration-200 ${
               activeTab === 'list' 
                 ? 'text-sky-600 dark:text-sky-400' 
@@ -1196,6 +591,14 @@ const LabReports = () => {
               />
             )}
           </button>
+        </div>
+      </div>
+      
+      {/* API Connection Info - ADDED FOR DEBUGGING */}
+      <div className="bg-slate-100 dark:bg-slate-800/50 p-3 rounded-lg text-xs">
+        <div className="flex justify-between">
+          <span><strong>API URL:</strong> {apiBaseUrl}/api/reports/</span>
+          <span><strong>Status:</strong> {loading ? 'Connecting...' : error ? 'Error' : 'Connected'}</span>
         </div>
       </div>
       
@@ -1503,12 +906,6 @@ const LabReports = () => {
                       </motion.div>
                     ))}
                   </div>
-                  {includeMetrics.length === 0 && (
-                    <p className="mt-2 text-xs text-rose-600 dark:text-rose-400 flex items-center">
-                      <FiAlertCircle className="mr-1 h-3 w-3" />
-                      Please select at least one metric to include in your report
-                    </p>
-                  )}
                 </div>
                 
                 {/* Submit Button with premium design and loading state */}
@@ -1520,11 +917,11 @@ const LabReports = () => {
                 >
                   <motion.button
                     type="submit"
-                    disabled={generating || includeMetrics.length === 0}
+                    disabled={generating}
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
                     className={`w-full py-3 px-4 rounded-lg ${
-                      generating || includeMetrics.length === 0
+                      generating
                         ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed'
                         : 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700'
                     } text-white font-medium shadow-sm flex items-center justify-center space-x-2 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2`}
@@ -1669,10 +1066,7 @@ const LabReports = () => {
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      fetchInProgressRef.current = false;
-                      fetchReports(true);
-                    }}
+                    onClick={() => fetchReports(true)}
                     className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-700/50 rounded-md transition-colors duration-200"
                     title="Refresh reports"
                     aria-label="Refresh reports"
@@ -1682,8 +1076,13 @@ const LabReports = () => {
                 </div>
               </div>
               
+              {/* CRITICAL FIX: Add debug info to help troubleshoot */}
+              <div className="px-6 py-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700/60">
+                API Status: {loading ? 'Loading data...' : (reports.length > 0 ? 'Found ' + reports.length + ' reports' : 'No reports found')}
+              </div>
+              
               {/* Loading state with skeleton loader for better UX */}
-              {loading && !reportsLoaded ? (
+              {loading ? (
                 <div className="space-y-4 p-6">
                   {/* Skeleton loader for table */}
                   {[1, 2, 3, 4, 5].map((i) => (
@@ -1786,9 +1185,9 @@ const LabReports = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-medium rounded-full ${getStatusBadgeClass(report.status)}`}>
-                              {report.status === 'generating' && report.id === generatedReportId && generating ? (
+                              {report.status === 'ready' || report.id === generatedReportId ? (
                                 <span className="flex items-center">
-                                  Generate Finished
+                                  Ready to download
                                 </span>
                               ) : (
                                 <span className="capitalize">
@@ -1798,57 +1197,30 @@ const LabReports = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {/* Show download button more aggressively */}
-                            {report.status === 'ready' || 
-                               // Always show for current generated report
-                               (report.id === generatedReportId && pollingAttemptCountRef.current > 1) ||
-                               // Show for any generating report that's more than 3 seconds old
-                               (report.status === 'generating' && 
-                                new Date() - new Date(report.created_at) > 3000) ? (
+                            <div className="flex space-x-2">
+                              {/* Always show download button */}
                               <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => handleDownload(report.id)}
-                                className="inline-flex items-center px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-medium rounded-md border border-sky-200 transition-colors duration-150 dark:bg-sky-900/20 dark:hover:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800/30"
+                                disabled={downloadInProgress}
+                                className="inline-flex items-center px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-medium rounded-md border border-sky-200 transition-colors duration-150 dark:bg-sky-900/20 dark:hover:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800/30 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <FiDownload className="mr-1.5 h-3.5 w-3.5" />
                                 Download
                               </motion.button>
-                            ) : report.status === 'generating' ? (
-                              // For reports in "generating" status that aren't the currently tracked one
-                              <div className="flex space-x-2">
-                                <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-600 mr-1.5 animate-pulse"></div>
-                                  In progress...
-                                </span>
-                                <motion.button
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  onClick={() => handleDownload(report.id)}
-                                  className="inline-flex items-center px-2 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-200 transition-colors duration-150 dark:bg-slate-700/30 dark:hover:bg-slate-700/50 dark:text-slate-300 dark:border-slate-700/50"
-                                >
-                                  <FiDownload className="h-3 w-3" />
-                                </motion.button>
-                              </div>
-                            ) : report.status === 'error' ? (
-                              <div className="group relative">
-                                <span className="text-xs text-rose-600 dark:text-rose-400 flex items-center cursor-help">
-                                  <MdError className="mr-1.5 h-3.5 w-3.5" />
-                                  Error
-                                </span>
-                                {report.error_message && (
-                                  <div className="absolute z-10 hidden group-hover:block left-0 bottom-full mb-2 w-64 p-3 bg-white dark:bg-slate-900 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300">
-                                    <div className="font-medium mb-1 text-rose-600 dark:text-rose-400">Error Details:</div>
-                                    {report.error_message}
-                                    <div className="absolute left-4 bottom-0 transform translate-y-1/2 rotate-45 w-2 h-2 bg-white dark:bg-slate-900 border-r border-b border-slate-200 dark:border-slate-700"></div>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400 dark:text-slate-500">
-                                Unavailable
-                              </span>
-                            )}
+                              
+                              {/* Open in Browser button - helps with direct access */}
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => openReportInNewTab(report.id)}
+                                className="inline-flex items-center px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-md border border-slate-200 transition-colors duration-150 dark:bg-slate-800/50 dark:hover:bg-slate-700/50 dark:text-slate-300 dark:border-slate-700/50"
+                                title="Open in browser"
+                              >
+                                <FiExternalLink className="h-3.5 w-3.5" />
+                              </motion.button>
+                            </div>
                           </td>
                         </motion.tr>
                       ))}
