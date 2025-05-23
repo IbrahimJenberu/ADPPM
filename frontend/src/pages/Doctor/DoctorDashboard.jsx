@@ -408,7 +408,7 @@ export default function DoctorDashboard() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Welcome back, Dr. {user.last_name || 'Tamagn Z.'}
+              Welcome back, Dr. {user.last_name || ''}
             </h1>
             <p className="mt-1 text-gray-600 dark:text-gray-400">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

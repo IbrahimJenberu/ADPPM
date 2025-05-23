@@ -3143,29 +3143,7 @@ const PatientManagement = () => {
                           className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                         />
                       </div>
-                      
-                      {/* JSON Data Input for advanced users */}
-                      <div className="mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
-                        <details className="text-sm">
-                          <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium flex items-center">
-                            <FiShield className="mr-2 opacity-70" />
-                            Advanced: Edit as JSON
-                            <FiChevronDown className="ml-1.5 w-4 h-4 opacity-70 group-open:rotate-180 transition-transform" />
-                          </summary>
-                          <div className="mt-3">
-                            <textarea
-                              className="w-full h-48 p-4 font-mono text-xs border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
-                              placeholder="Paste JSON data"
-                              onChange={(e) => handleJSONDataInput(e, true)}
-                              defaultValue={JSON.stringify(editRecordData, null, 2)}
-                            ></textarea>
-                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
-                              You can paste a JSON object with the fields you want to update. 
-                              This is for advanced users only.
-                            </p>
-                          </div>
-                        </details>
-                      </div>
+
                     </div>
 
                     {/* Form Actions */}
@@ -3439,29 +3417,7 @@ const PatientManagement = () => {
                           className="w-full p-3.5 border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-white/80 dark:bg-slate-700/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
                         />
                       </div>
-                      
-                      {/* JSON Data Input for advanced users */}
-                      <div className="mt-6 pt-6 border-t border-slate-200/70 dark:border-slate-700/50">
-                        <details className="text-sm">
-                          <summary className="cursor-pointer text-blue-600 dark:text-blue-400 font-medium flex items-center">
-                            <FiShield className="mr-2 opacity-70" />
-                            Advanced: Edit as JSON
-                            <FiChevronDown className="ml-1.5 w-4 h-4 opacity-70 group-open:rotate-180 transition-transform" />
-                          </summary>
-                          <div className="mt-3">
-                            <textarea
-                              className="w-full h-48 p-4 font-mono text-xs border border-slate-300/70 dark:border-slate-600/50 rounded-xl bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm focus:ring-2 focus:ring-blue-500/70 dark:focus:ring-blue-400/50 focus:border-transparent text-slate-800 dark:text-slate-200 shadow-sm"
-                              placeholder="Paste JSON data"
-                              onChange={handleJSONDataInput}
-                              defaultValue={JSON.stringify(newRecord, null, 2)}
-                            ></textarea>
-                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">
-                              You can paste a JSON object with medical record data.
-                              This is for advanced users only.
-                            </p>
-                          </div>
-                        </details>
-                      </div>
+
                     </div>
                     
                     {/* Form Actions */}
