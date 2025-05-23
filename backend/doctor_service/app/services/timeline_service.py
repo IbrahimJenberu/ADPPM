@@ -1,5 +1,3 @@
-# New file: doctor_service/app/services/timeline_service.py
-
 import asyncio
 import asyncpg
 import httpx
@@ -44,18 +42,18 @@ async def get_patient_timeline_fast(
             FROM patients p
             WHERE p.id = $1 AND p.is_active = true
         ),
-        opd_assignments AS (
+        patient_assignments AS (
             SELECT 
                 'ASSIGNED_OPD' as status,
-                oa.created_at as timestamp,
-                oa.id as assignment_id,
+                pda.assigned_at as timestamp,
+                pda.id as assignment_id,
                 jsonb_build_object(
-                    'assignment_id', oa.id,
-                    'department', oa.department,
-                    'assigned_by', oa.created_by
+                    'assignment_id', pda.id, 
+                    'doctor_id', pda.doctor_id,
+                    'notes', pda.notes
                 ) as details
-            FROM opd_assignments oa
-            WHERE oa.patient_id = $1 AND oa.is_active = true
+            FROM patient_doctor_assignments pda
+            WHERE pda.patient_id = $1 AND pda.is_active = true
         ),
         medical_records AS (
             SELECT 
@@ -99,10 +97,10 @@ async def get_patient_timeline_fast(
                 lr.id,
                 lr.patient_id,
                 lr.test_type,
-                lr.priority,
+                lr.urgency as priority,
                 lr.status,
                 lr.created_at,
-                lr.completed_at
+                lr.result_date as completed_at
             FROM lab_requests lr
             WHERE lr.patient_id = $1 AND lr.doctor_id = $2
         ),
@@ -144,7 +142,7 @@ async def get_patient_timeline_fast(
             UNION ALL
             
             -- OPD assignments
-            SELECT status, timestamp, details FROM opd_assignments
+            SELECT status, timestamp, details FROM patient_assignments
             
             UNION ALL
             

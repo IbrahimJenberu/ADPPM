@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { useNavigate, useLocation, Route, Routes } from 'react-router-dom';
+import { useNavigate, useLocation, Route, Routes, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Eye, EyeOff, User, Lock, LogIn, AlertCircle, HelpCircle, Moon, Sun, ArrowLeft, Mail, Check, X, Shield, Calendar, Bell } from 'react-feather';
+import { Eye, EyeOff, User, Lock, LogIn, AlertCircle, HelpCircle, Moon, Sun, ArrowLeft, Mail, Check, X, Shield, Calendar, Bell, Home } from 'react-feather';
 import { useAuth } from '../../contexts/AuthContext';
 import { Toaster, toast } from 'react-hot-toast';
 
@@ -563,23 +563,40 @@ const Login = () => {
         />
       </div>
       
-      {/* Dark mode toggle with improved visual feedback */}
-      <motion.button
-        onClick={toggleDarkMode}
-        whileHover={{ scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}
-        whileTap={{ scale: 0.95 }}
-        className={`fixed right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-300 
-          ${darkMode 
-            ? 'bg-gray-800 text-gray-200 hover:bg-gray-700 border border-gray-700' 
-            : 'bg-white text-gray-700 hover:bg-gray-100'}`}
-        aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-      >
-        {darkMode ? (
-          <Sun className="h-4 w-4" />
-        ) : (
-          <Moon className="h-4 w-4" />
-        )}
-      </motion.button>
+      {/* Navigation buttons in the top right */}
+      <div className="fixed right-6 top-6 flex items-center space-x-3">
+        {/* Home button */}
+        <motion.button
+          onClick={() => navigate('/')}
+          whileHover={{ scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}
+          whileTap={{ scale: 0.95 }}
+          className={`flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-300 
+            ${darkMode 
+              ? 'bg-gray-800 text-gray-200 hover:bg-gray-700 border border-gray-700' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+          aria-label="Go to home page"
+        >
+          <Home className="h-4 w-4" />
+        </motion.button>
+        
+        {/* Dark mode toggle */}
+        <motion.button
+          onClick={toggleDarkMode}
+          whileHover={{ scale: 1.05, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)" }}
+          whileTap={{ scale: 0.95 }}
+          className={`flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-all duration-300 
+            ${darkMode 
+              ? 'bg-gray-800 text-gray-200 hover:bg-gray-700 border border-gray-700' 
+              : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+          aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {darkMode ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+        </motion.button>
+      </div>
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

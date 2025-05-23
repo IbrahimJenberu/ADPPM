@@ -1273,27 +1273,56 @@ const PatientManagement = () => {
         }
       );
       
-      if (response.data && response.data.id) {
-        setShowEditRecordModal(false);
+      // Log the response to see its exact structure
+      console.log("Update record response:", response.data);
+      
+      // Check for a successful response - this is more flexible and doesn't rely on specific fields
+      if (response.status >= 200 && response.status < 300) {
+        // Display a success toast notification immediately
+        toast.success('Medical record updated successfully!', {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          className: "bg-white dark:bg-slate-800 shadow-xl",
+          bodyClassName: "text-slate-700 dark:text-slate-200",
+          progressClassName: "bg-emerald-500 dark:bg-emerald-400"
+        });
+        
+        // Set success message in the UI
         setOperationSuccess('Medical record updated successfully');
+        
+        // Get updated record data from the response or use the current data if not available
+        const updatedRecord = response.data || editRecordData;
         
         // Update the records in the local state
         setPatientRecords(prevRecords => 
           prevRecords.map(record => 
-            record.id === editRecordData.id ? response.data : record
+            record.id === editRecordData.id ? updatedRecord : record
           )
         );
         
         // Update selected record if it's being viewed
         if (selectedRecord && selectedRecord.id === editRecordData.id) {
-          setSelectedRecord(response.data);
+          setSelectedRecord(updatedRecord);
         }
+        
+        // Close modal after a small delay to ensure toast is visible
+        setTimeout(() => {
+          setShowEditRecordModal(false);
+        }, 300);
       } else {
         setEditRecordError('Failed to update medical record');
       }
     } catch (err) {
-      setEditRecordError(`Error updating medical record: ${err.message}`);
+      // Log the full error
       console.error('Error updating medical record:', err);
+      
+      // Extract the most useful error message
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message;
+      setEditRecordError(`Error updating medical record: ${errorMessage}`);
     } finally {
       setUpdatingRecord(false);
     }
@@ -1480,8 +1509,28 @@ const PatientManagement = () => {
         params: { doctor_id: user.id }
       });
       
-      if (response.data && response.data.id) {
-        // Reset form and close modal
+      // Log response to help with debugging
+      console.log("Create medical record response:", response.data);
+      
+      // Check for a successful response - HTTP status between 200-299
+      if (response.status >= 200 && response.status < 300) {
+        // Show immediate success toast
+        toast.success('Medical record added successfully!', {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          className: "bg-white dark:bg-slate-800 shadow-xl",
+          bodyClassName: "text-slate-700 dark:text-slate-200",
+          progressClassName: "bg-emerald-500 dark:bg-emerald-400"
+        });
+        
+        // Set success message state
+        setOperationSuccess('Medical record added successfully');
+        
+        // Reset form
         setNewRecord({
           diagnosis: '',
           treatment: '',
@@ -1498,13 +1547,17 @@ const PatientManagement = () => {
           is_active: true
         });
         setMedicationInput('');
-        setShowNewRecordModal(false);
-        setOperationSuccess('Medical record added successfully');
+        
+        // Close modal after a small delay to ensure toast is visible
+        setTimeout(() => {
+          setShowNewRecordModal(false);
+        }, 300);
       } else {
         setFormError('Failed to create record');
       }
     } catch (err) {
-      setFormError(`Error creating medical record: ${err.message}`);
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || err.message;
+      setFormError(`Error creating medical record: ${errorMessage}`);
       console.error('Error creating medical record:', err);
     } finally {
       setSubmitting(false);
