@@ -46,6 +46,15 @@ async def create_opd_assignment(
     if not doctor:
         raise ResourceNotFoundException("Doctor", str(assignment.doctor_id))
     
+    # Important: Prepare and store doctor data FIRST to ensure it exists before creating the assignment
+    doctor_data = {
+        "id": doctor["id"],
+        "full_name": doctor["full_name"],
+        "department": doctor["department"],
+        "is_available": True
+    }
+    await DoctorModel.upsert(doctor_data)
+    
     # Create assignment with the current user as assigner
     assignment_data = assignment.dict()
     assignment_data["status"] = "PENDING"
@@ -67,15 +76,6 @@ async def create_opd_assignment(
         if "duplicate key" in str(e).lower():
             raise BadRequestException("This patient is already assigned to the same doctor")
         raise
-    
-    # Prepare and store doctor data
-    doctor_data = {
-        "id": doctor["id"],
-        "full_name": doctor["full_name"],
-        "department": doctor["department"],
-        "is_available": True
-    }
-    await DoctorModel.upsert(doctor_data)
     
     # Send notification
     patient_name = f"{patient['first_name']} {patient['last_name']}"

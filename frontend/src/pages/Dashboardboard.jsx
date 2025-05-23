@@ -1,7 +1,5 @@
-// pages/Dashboardboard.jsx
-
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+
 import { useNavigate, Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { FiMenu, FiBell, FiHome, FiActivity, FiClipboard, 
@@ -37,6 +35,7 @@ import LabPatients from './Doctor/LabTech/LabPatients';
 import LabHistory from './Doctor/LabTech/LabHistory';
 import LabReports from './Doctor/LabTech/LabReports';
 import LabTests from './Doctor/LabTests';
+import { useAuth } from '../contexts/AuthContext';
 
 // Import high-quality fonts
 const fontStyle = `
@@ -444,7 +443,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   );
 };
 
-// Password Change Form Component
+// Password Change Form Component with enhanced debugging
 const ChangePasswordForm = ({ onSubmit, isLoading }) => {
   const [formData, setFormData] = useState({
     currentPassword: '',
@@ -458,6 +457,7 @@ const ChangePasswordForm = ({ onSubmit, isLoading }) => {
   
   const handleChange = (e) => {
     const { name, value } = e.target;
+    console.log(`Field changed: ${name}, new value length: ${value.length}`);
     setFormData(prev => ({ ...prev, [name]: value }));
     
     // Clear error for this field when user starts typing again
@@ -467,6 +467,9 @@ const ChangePasswordForm = ({ onSubmit, isLoading }) => {
   };
   
   const validateForm = () => {
+    console.log('Validating form...');
+    console.log('Current form data:', formData);
+    
     const newErrors = {};
     
     if (!formData.currentPassword) {
@@ -489,18 +492,42 @@ const ChangePasswordForm = ({ onSubmit, isLoading }) => {
       newErrors.newPassword = 'New password must be different from current password';
     }
     
+    console.log('Validation errors:', newErrors);
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    const isValid = Object.keys(newErrors).length === 0;
+    console.log('Form is valid:', isValid);
+    return isValid;
   };
   
   const handleSubmit = (e) => {
+    console.log('Form submit triggered');
     e.preventDefault();
     
-    if (validateForm()) {
-      onSubmit({
+    // Log the event object for debugging
+    console.log('Submit event:', e.type);
+    
+    const isValid = validateForm();
+    console.log('Form validated, result:', isValid);
+    
+    if (isValid) {
+      console.log('Form is valid, preparing data for submission');
+      const passwordData = {
         current_password: formData.currentPassword,
-        new_password: formData.newPassword
-      });
+        new_password: formData.newPassword,
+        confirm_password: formData.confirmPassword
+      };
+      
+      console.log('Submitting password data:', passwordData);
+      
+      try {
+        onSubmit(passwordData);
+        console.log('onSubmit function called successfully');
+      } catch (error) {
+        console.error('Error in onSubmit:', error);
+      }
+    } else {
+      console.log('Form validation failed, not submitting');
     }
   };
   
@@ -611,8 +638,10 @@ const ChangePasswordForm = ({ onSubmit, isLoading }) => {
       </div>
       
       <div className="flex justify-end mt-6 space-x-3">
+        {/* Using a direct onClick handler instead of relying only on form submission */}
         <button
-          type="submit"
+          type="button" 
+          onClick={handleSubmit}
           disabled={isLoading}
           className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 text-white font-medium shadow-md hover:shadow-lg transition-all duration-200 focus:ring-2 focus:ring-sky-500/30 focus:outline-none font-satoshi flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed"
         >
@@ -631,7 +660,7 @@ const ChangePasswordForm = ({ onSubmit, isLoading }) => {
 };
 
 function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
@@ -900,37 +929,49 @@ function Dashboard() {
     await logout();
   };
   
-  // Function to handle change password
+  // Function to handle change password - Modified to work with your specific API
   const handleChangePassword = async (passwordData) => {
+    console.log('handleChangePassword called with data:', passwordData);
+    
     setIsChangingPassword(true);
     
     try {
-      // Get the token from localStorage
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        throw new Error('Authentication token not found');
+      // Make sure we have the user ID
+      if (!user?.id) {
+        console.error('User ID not found in user object:', user);
+        throw new Error('User ID not found');
       }
       
-      const response = await fetch('http://localhost:8022/users/me/change-password', {
+      // No token needed for this specific endpoint
+      const apiUrl = `http://localhost:8022/users/users/${user.id}/change-password`;
+      console.log('Making API call to:', apiUrl);
+      
+      const apiResponse = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` // Include the token in the authorization header
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(passwordData),
+        // No Authorization header needed for this endpoint
+        body: JSON.stringify(passwordData)
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to change password');
+      console.log('API Response status:', apiResponse.status);
+      
+      if (!apiResponse.ok) {
+        const errorData = await apiResponse.json().catch(() => ({}));
+        console.error('API error response:', errorData);
+        throw new Error(errorData.detail || `Error ${apiResponse.status}: ${apiResponse.statusText}`);
       }
       
+      const successData = await apiResponse.json().catch(() => ({ message: 'Password updated successfully' }));
+      console.log('API success response:', successData);
+      
       // Show success message and close modal
-      addToast('Password Updated', 'Your password has been changed successfully.', 'success');
+      addToast('Password Updated', successData.message || 'Your password has been changed successfully.', 'success');
       setShowChangePasswordModal(false);
     } catch (error) {
-      addToast('Password Update Failed', error.message, 'error');
+      console.error('Password change error:', error);
+      addToast('Password Update Failed', error.message || 'An unexpected error occurred', 'error');
     } finally {
       setIsChangingPassword(false);
     }
